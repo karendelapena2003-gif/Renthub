@@ -1,0 +1,178 @@
+/* ======== REGISTER PAGE STYLE ======== */
+
+.register-page {
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: url("/image/bondok.png") no-repeat center center/cover;
+  backdrop-filter: blur(5px);
+  position: relative;
+}
+
+/* Slight dark overlay to help readability */
+.register-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 0;
+}
+
+/* ===== Glass Register Box ===== */
+.register-box {
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  background: rgba(28, 28, 28, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 10px 35px rgba(70, 220, 188, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(12, 123, 197, 0.25);
+  padding: 45px;
+  text-align: center;
+  color: #0f0f0e;
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+/* ===== Title ===== */
+.register-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #309fce;
+  text-shadow: 0 0 10px rgba(120, 240, 255, 0.35);
+}
+
+/* ===== Input Fields ===== */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.register-input {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  outline: none;
+  background: rgba(30, 191, 180, 0.2);
+  color: #33dfdd;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 0 8px rgba(8, 104, 167, 0.2);
+}
+
+.register-input::placeholder {
+  color: #2ea3b5;
+}
+
+.register-input:focus {
+  background: rgba(43, 52, 225, 0.35);
+  box-shadow: 0 0 10px rgba(213, 17, 47, 0.6);
+}
+
+/* ===== Register Button ===== */
+.register-btn {
+  background: linear-gradient(90deg, #6ad0ff, #7cf4c4);
+  border: none;
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: rgb(55, 213, 234);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(120, 240, 220, 0.4);
+}
+
+.register-btn:hover {
+  transform: scale(1.05);
+  background: linear-gradient(90deg, #7cf4c4, #6ad0ff);
+  box-shadow: 0 4px 25px rgba(140, 255, 230, 0.6);
+}
+
+/* ===== Error Message ===== */
+.error-message {
+  color: #ff6b6b;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+/* ===== Social Login ===== */
+.social-login {
+  margin-top: 25px;
+}
+
+.social-login p {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.social-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.google-btn,
+.facebook-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  color: #489dd1;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.google-btn:hover,
+.facebook-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 10px rgba(140, 255, 230, 0.4);
+}
+
+.google-btn img,
+.facebook-btn img {
+  width: 18px;
+  height: 18px;
+}
+
+/* ===== Switch to Login ===== */
+.register-switch {
+  margin-top: 25px;
+  font-size: 14px;
+  color: #d9faff;
+}
+
+.register-link {
+  color: #9feeff;
+  cursor: pointer;
+  font-weight: 600;
+  transition: color 0.3s ease;
+}
+
+.register-link:hover {
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(160, 255, 230, 0.8);
+}
+
+/* ===== Fade Animation ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

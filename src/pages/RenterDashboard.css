@@ -1,0 +1,608 @@
+/* ======== MAIN LAYOUT ======== */
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: white;
+}
+
+/* FIXED SIDEBAR (ChatGPT Style) */
+.dashboard-container .sidebar {
+  width: 240px;
+  min-width: 200px;
+  background: #0ea5e9; /* sky blue */
+  color: white;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  overflow-y: auto;
+  padding-top: 20px;
+  z-index: 800;
+}
+
+/* ======== CONTENT AREA ======== */
+.dashboard-content {
+  flex: 1;
+  margin-left: 300px;
+  padding: 20px;
+  height: 100vh;
+  overflow-y: auto;
+  background: #e7ecf2; /* soft white/blue */
+}
+
+/* ======== RESPONSIVE FIX (does not hide sidebar) ======== */
+@media (max-width: 900px) {
+  .dashboard-container .sidebar {
+    width: 220px;
+    min-width: 220px;
+  }
+
+  .dashboard-content {
+    margin-left: 220px;
+  }
+}
+
+@media (max-width: 650px) {
+  .dashboard-container .sidebar {
+    width: 200px;
+    min-width: 200px;
+  }
+
+  .dashboard-content {
+    margin-left: 200px;
+  }
+}
+
+@media (max-width: 500px) {
+  .dashboard-container .sidebar {
+    width: 180px;
+    min-width: 180px;
+  }
+
+  .dashboard-content {
+    margin-left: 180px;
+  }
+}
+
+/* ===== PROFILE SECTION ===== */
+.profile-section h2 {
+  color: #0f1112;
+  font-weight: bold;
+  text-align: center; /* this centers the text */
+}
+
+.profile-container {
+  background: rgb(165, 211, 243);
+  padding: 20px; /* smaller padding */
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  max-width: 400px; /* optional: prevent it from being too wide */
+  margin: 0 auto; /* center horizontally if needed */
+}
+
+/* small clean image */
+.profile-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 2px solid #0ea5e9;
+}
+
+.profile-info p {
+  font-size: 16px;
+  color: black; /* Name BLACK */
+}
+
+/* ===== BUTTONS ===== */
+button {
+  background: #0ea5e9;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  background: #0284c7;
+}
+
+/* Cancel button */
+.cancel-btn {
+  background: #ef4444;
+}
+
+.cancel-btn:hover {
+  background: #dc2626;
+}
+
+/* ===== RENTAL GRID ===== */
+.rental-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 25px;
+  padding: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* MAIN PAGE SECTION — PARA HINDI DIDIKIT SA SIDEBAR */
+.page-section {
+  margin-left: 260px;
+  padding: 20px;
+  max-width: 1100px;
+}
+
+
+
+/* ===== DASHBOARD CONTENT ===== */
+.dashboard-content {
+  flex: 1;
+  margin-left: 260px; /* adjust for sidebar */
+  padding: 20px;
+  min-height: 88vh;
+  overflow-y: auto;
+  background: #e7ecf2;
+  box-sizing: border-box;
+}
+
+/* ===== PAGE SECTION ===== */
+.page-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 20px;
+  margin: 0 auto;
+  max-width: 1050px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  box-sizing: border-box;
+}
+
+/* ===== SEARCH BAR ===== */
+.search-bar {
+  margin-bottom: 15px;
+}
+.search-bar input {
+  width: 20%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+/* ===== RENTAL GRID ===== */
+.rental-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px;
+  justify-items: center;
+  margin-top: 10px;
+}
+
+/* ===== RENTAL CARD ===== */
+.rental-card {
+  background: rgb(133, 174, 226);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 500px;      /* compact size */
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  box-sizing: border-box;
+  transition: transform 0.2s;
+}
+.rental-card:hover {
+  transform: scale(1.03);
+}
+
+/* IMAGE INSIDE CARD */
+.rental-card img,
+.rental-image {
+  width: 100%;
+  max-width: 200px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* TEXT */
+.rental-card h3,
+.rental-card p {
+  color: #111;
+  text-align: left;
+  width: 100%;
+  font-size: 14px;
+  word-wrap: break-word;
+}
+
+/* RENTAL ACTION BUTTONS */
+.rental-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+/* MESSAGE OWNER */
+.message-owner input {
+  width: 60%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  margin-bottom: 4px;
+}
+.message-owner button {
+  background: #0ea5e9;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+/* COMMENTS */
+.comments-section input {
+  width: 50%;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  border: 1px solid #bd0b0b;
+}
+.comments-section button {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* COMMENT CARD */
+.comment-card {
+  background: #baf7f7;
+  padding: 8px;           /* mas comfortable na padding */
+  border-radius: 8px;
+  margin-top: 6px;
+  max-height: 100px;
+  max-width: 300px;      /* maximum height ng comment card */
+  overflow-y: auto;       /* mag-scroll kapag lumampas sa max-height */
+  word-wrap: break-word;  /* hatiin ang mahahabang salita */
+}
+
+/* OWNER POSTS LIST CONTAINER */
+.owner-posts-list {
+  display: grid; /* or flex */
+  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); /* bawat card 300px min */
+  gap: 10px; /* space sa pagitan ng cards */
+  margin-top: 5px;
+}
+
+/* OWNER PROFILE REPLACEMENT */
+.owner-profile-replacement {
+  max-width: 800px;
+  margin-left: 18px; /* avoid touching sidebar */
+  margin-top: 15px;
+  background: #ffffff;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+.owner-profile-header {
+  margin-bottom: 10px;
+}
+.owner-profile-header input {
+  width: 50%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  margin-top: 6px;
+}
+
+/* OWNER POST CARD */
+.owner-post-card {
+  background: rgb(133, 174, 226);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 370px;      /* compact size */
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  transition: transform 0.2s;
+  
+  
+}
+.owner-post-card img {
+ width: 100%;
+  max-width: 400px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.owner-post-card h4,
+.owner-post-card p {
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;       /* single line lang */
+  overflow: hidden;          /* hindi lalabas sa container */
+  text-overflow: ellipsis;   /* lalabas ang ... kapag mahaba */
+  
+}
+
+/* RENT NOW MODAL FULL SCREEN RESPONSIVE */
+.rental-modal {
+  width: 90vw;               /* 90% ng viewport width */
+  max-width: 700px;
+  max-height: 90vh;          /* 90% ng viewport height */
+  overflow-y: auto;          /* scroll kapag talagang sobra */
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-sizing: border-box;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  margin: 5vh auto;          /* center sa vertical at horizontal */
+  transition: all 0.3s ease;
+}
+
+/* IMAGE / MAP SCALE DOWN */
+.rental-modal img,
+.rental-modal .rental-map {
+  width: 100%;
+  max-width: 250px;
+  height: auto;           /* maintain aspect ratio */
+  object-fit: contain;
+  margin-bottom: 10px;
+}
+
+/* CLOSE BUTTON */
+.close-btn {
+  background: red;
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  float: right;
+}
+
+/* FLEXIBLE CONTENT */
+.rental-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* SCALE FONT RESPONSIVELY */
+.rental-modal-content p,
+.rental-modal-content h3,
+.rental-modal-content h4 {
+  font-size: clamp(12px, 1.2vw, 16px); /* min 12px, max 16px */
+}
+
+/* ACTION BUTTONS RESPONSIVE */
+.rental-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rental-modal-actions button {
+  flex: 1 1 auto;
+  min-width: 100px;
+  padding: 8px 12px;
+  font-size: clamp(12px, 1vw, 14px);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 600px) {
+  .rental-modal {
+    width: 95vw;
+    padding: 12px;
+    max-height: 95vh;
+  }
+
+  .rental-modal img,
+  .rental-modal .rental-map {
+    max-width: 200px;
+  }
+
+  .rental-modal-actions {
+    flex-direction: column;
+  }
+}
+
+
+/* ================= MY RENTALS PAGE ================= */
+.my-rentals-page {
+  max-width: 1500px;
+  margin-left: 20px; /* avoid touching sidebar */
+  margin-top: 20px;
+  padding: 15px;
+  background: #7caed7;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.my-rentals-page .rentals-title {
+  font-size: 10px;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+/* ---------- Tabs ---------- */
+.my-rentals-page .rentals-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-bottom: 15px;
+}
+
+.my-rentals-page .rentals-tab-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #3c71c1;
+  cursor: pointer;
+  font-weight: 400px;
+  transition: background 0.2s;
+}
+
+.my-rentals-page .rentals-tab-btn:hover {
+  background: #a5b4fc;
+  color: #821a1a;
+}
+
+.my-rentals-page .rentals-tab-btn.active {
+  background: #6366f1;
+  color: #fff;
+}
+
+.my-rentals-page .rentals-tab-btn.secondary {
+  background: #f87171;
+  color: #fff;
+}
+
+/* ---------- Rental List ---------- */
+.my-rentals-page .rental-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 5px;
+}
+
+/* ---------- Rental Card ---------- */
+.my-rentals-page .rental-card {
+  background: #bff0f1;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s;
+}
+
+.my-rentals-page .rental-card:hover {
+  transform: translateY(-3px);
+}
+
+/* Image */
+.my-rentals-page .rental-card-image {
+  width: 90%;          /* full width ng card */
+  max-height: 150px;    /* tamang taas */
+  object-fit: cover;    /* maintain aspect ratio at mag-fit sa card */
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 8px 8px 0 0; /* optional, para mag-match sa card rounded corners */
+}
+
+
+/* Actions Buttons */
+.my-rentals-page .rental-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px;
+}
+
+.my-rentals-page .rental-card-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.my-rentals-page .cancel-rental-btn {
+  background: #f87171;
+  color: #fff;
+}
+
+.my-rentals-page .returned-rental-btn {
+  background: #34d399;
+  color: #fff;
+}
+
+.my-rentals-page .delete-rental-btn {
+  background: #9ca3af;
+  color: #fff;
+}
+
+/* Rental Info */
+.my-rentals-page .rental-info {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #333;
+}
+
+.my-rentals-page .rental-info p {
+  margin: 4px 0;
+  word-break: break-word;
+}
+
+.my-rentals-page .total-price {
+  font-weight: bold;
+  margin-top: 6px;
+}
+
+/* Status Colors */
+.my-rentals-page .rental-card.cancelled {
+  border-left: 4px solid #1fab28;
+}
+
+.my-rentals-page .rental-card.returned {
+  border-left: 4px solid #34d399;
+}
+
+.my-rentals-page .rental-card.completed {
+  border-left: 4px solid #6366f1;
+}
+
+/* No rentals text */
+.my-rentals-page .no-rentals-text {
+  color: #6b7280;
+  font-style: italic;
+  padding: 20px 0;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 900px) {
+  .my-rentals-page {
+    margin-left: 10px;
+    max-width: 95%;
+  }
+
+  .my-rentals-page .rental-list {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .my-rentals-page .rental-info {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 500px) {
+  .my-rentals-page .rental-list {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .my-rentals-page .rental-card-image {
+    max-height: 200px;
+  }
+
+  .my-rentals-page .rental-card-btn {
+    font-size: 12px;
+    padding: 3px 6px;
+  }
+}

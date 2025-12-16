@@ -1,0 +1,1028 @@
+// src/pages/AdminDashboard.js
+import React, { useState, useEffect } from "react";
+import Sidebar from "./Sidebar";
+import "./AdminDashboard.css";
+import { auth, db } from "../firebase";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  addDoc,
+  query,
+  orderBy,
+  serverTimestamp,
+  deleteDoc,
+  where,
+} from "firebase/firestore";
+import { updateProfile } from "firebase/auth";
+import { uploadToCloudinary } from "../cloudinary";
+import { increment } from "firebase/firestore";
+
+const AdminDashboard = ({ onLogout }) => {
+  /* ---------------- profile / UI ---------------- */
+  const [adminUser, setAdminUser] = useState(null);
+  const [displayName, setDisplayName] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("/default-profile.png");
+  const [isEditing, setIsEditing] = useState(false);
+
+  /* ---------------- core data ---------------- */
+  const [properties, setProperties] = useState([]);
+  const [filteredProperties, setFilteredProperties] = useState([]);
+  const [propertyFilter, setPropertyFilter] = useState("all");
+  const [propertyStats, setPropertyStats] = useState({ pending: 0, approved: 0, rejected: 0 });
+
+  const [usersList, setUsersList] = useState([]); // owners + renters
+  const [owners, setOwners] = useState([]);
+  const [renters, setRenters] = useState([]);
+
+  const [rentals, setRentals] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+
+  /* ---------------- messages ---------------- */
+  const [messages, setMessages] = useState([]);
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [replyText, setReplyText] = useState({});
+
+  /* ---------------- UI/navigation ---------------- */
+  const [activePage, setActivePage] = useState("dashboard");
+  const [loading, setLoading] = useState(true);
+
+  /* ---------------- modals / details ---------------- */
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserDetails, setShowUserDetails] = useState(false);
+  const [rentalModal, setRentalModal] = useState(null);
+  const [rentalStatusEdit, setRentalStatusEdit] = useState("");
+
+  /* ---------------- misc states that were missing ---------------- */
+  const [gcashAccountName, setGcashAccountName] = useState("");
+  const [gcashPhoneNumber, setGcashPhoneNumber] = useState("");
+  const [expandedWithdrawal, setExpandedWithdrawal] = useState(null);
+  const [rentalsByRenterState, setRentalsByRenterState] = useState([]);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const ownerId = auth.currentUser ? auth.currentUser.uid : null;
+
+  /* ---------------- initial admin ---------------- */
+  useEffect(() => {
+    const u = auth.currentUser;
+    if (u) {
+      setAdminUser(u);
+      setDisplayName(u.displayName || "");
+      setPhotoPreview(u.photoURL || "/default-profile.png");
+    }
+  }, []);
+
+  /* ---------------- realtime listeners ---------------- */
+  useEffect(() => {
+    setLoading(true);
+
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      setUsersList(list);
+      setOwners(list.filter((u) => u.role === "owner"));
+      setRenters(list.filter((u) => u.role === "renter"));
+    });
+
+    const unsubProps = onSnapshot(collection(db, "properties"), (snap) => {
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setProperties(arr);
+      setFilteredProperties(propertyFilter === "all" ? arr : arr.filter((p) => (p.status || "").toLowerCase() === propertyFilter));
+      const pending = arr.filter((p) => (p.status || "").toLowerCase() === "pending").length;
+      const approved = arr.filter((p) => (p.status || "").toLowerCase() === "approved").length;
+      const rejected = arr.filter((p) => (p.status || "").toLowerCase() === "rejected").length;
+      setPropertyStats({ pending, approved, rejected });
+    });
+
+    const rentalsQ = query(collection(db, "rentals"), orderBy("createdAt", "desc"));
+    const unsubRentals = onSnapshot(rentalsQ, (snap) => setRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+
+    const unsubWithdrawals = onSnapshot(collection(db, "withdrawals"), (snap) => setWithdrawals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+
+    // Messages listener
+    const unsubMessages = onSnapshot(collection(db, "messages"), (snap) => {
+      const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setMessages(msgs);
+    });
+
+    setLoading(false);
+    return () => {
+      unsubUsers();
+      unsubProps();
+      unsubRentals();
+      unsubWithdrawals();
+      unsubMessages();
+    };
+  }, [propertyFilter]);
+
+  /* ---------------- helper util functions ---------------- */
+  const formatDate = (val) => {
+    if (!val) return "N/A";
+    try {
+      if (typeof val.toDate === "function") return val.toDate().toLocaleString();
+      return new Date(val).toLocaleString();
+    } catch {
+      return "N/A";
+    }
+  };
+
+  const handlePhotoSelect = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setPhotoFile(f);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!adminUser) return;
+    if (!displayName.trim()) return alert("Name required");
+    setLoading(true);
+    try {
+      let photoURL = adminUser.photoURL || "";
+      if (photoFile) {
+        const uploaded = await uploadToCloudinary(photoFile, "renthub/profiles");
+        photoURL = uploaded?.secure_url || uploaded || photoURL;
+      }
+
+      // Update Firebase auth
+      try {
+        await updateProfile(auth.currentUser, { displayName, photoURL });
+      } catch (e) {
+        console.warn("updateProfile failed:", e);
+      }
+
+      // Update users collection
+      try {
+        await updateDoc(doc(db, "users", adminUser.uid), { displayName, photoURL, updatedAt: serverTimestamp() });
+      } catch {}
+
+      // Update GCash info in settings/gcash
+      try {
+        await updateDoc(doc(db, "settings", "gcash"), {
+          accountName: gcashAccountName,
+          phoneNumber: gcashPhoneNumber,
+          updatedAt: serverTimestamp()
+        });
+      } catch (err) {
+        // If document doesn't exist, create it
+        await setDoc(doc(db, "settings", "gcash"), {
+          accountName: gcashAccountName,
+          phoneNumber: gcashPhoneNumber,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      setAdminUser({ ...adminUser, displayName, photoURL });
+      setIsEditing(false);
+      setPhotoFile(null);
+      alert("Profile updated");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openUserDetails = (user) => {
+    setSelectedUser(user);
+    setShowUserDetails(true);
+  };
+  const closeUserDetails = () => {
+    setSelectedUser(null);
+    setShowUserDetails(false);
+  };
+
+  const updatePropertyStatus = async (propertyId, newStatus) => {
+    try {
+      await updateDoc(doc(db, "properties", propertyId), { status: newStatus, updatedAt: serverTimestamp() });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update property");
+    }
+  };
+
+  /* ---------------- withdrawals ---------------- */
+  const approveWithdrawal = async (w) => {
+    try {
+      const withdrawalRef = doc(db, "withdrawals", w.id);
+      await updateDoc(withdrawalRef, {
+        status: "approved",
+        confirmAmount: w.confirmAmount ?? w.amount,
+        approvedAt: serverTimestamp(),
+      });
+
+      // Optionally update owner's earnings in owners collection if such exists
+      if (w.ownerId) {
+        const ownerRef = doc(db, "owners", w.ownerId);
+        try {
+          await updateDoc(ownerRef, {
+            earnings: increment(0) // no-op unless you want to change stored earnings
+          });
+        } catch (e) {
+          // safe to ignore if owners collection not used
+        }
+      }
+
+      setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, status: "approved", confirmAmount: w.confirmAmount ?? w.amount } : item)));
+      alert("✅ Withdrawal approved successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Failed to approve withdrawal");
+    }
+  };
+
+  const rejectWithdrawal = async (w) => {
+    try {
+      const withdrawalRef = doc(db, "withdrawals", w.id);
+      await updateDoc(withdrawalRef, { status: "rejected", rejectedAt: serverTimestamp() });
+
+      // Refund to owner's earnings if ownerId present
+      if (w.ownerId && typeof w.amount === "number") {
+        const ownerRef = doc(db, "owners", w.ownerId);
+        try {
+          await updateDoc(ownerRef, { earnings: increment(w.amount) });
+        } catch (e) {
+          // ignore if owners collection not present
+        }
+      }
+
+      setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, status: "rejected" } : item)));
+      alert("❌ Withdrawal rejected and amount refunded to owner");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Failed to reject withdrawal");
+    }
+  };
+
+  
+  /* ---------------- rentals grouping & modal helpers ---------------- */
+  const rentalsByRenter = usersList
+    .filter((u) => u.role === "renter")
+    .map((r) => {
+      const items = rentals.filter((t) => t.renterEmail === r.email);
+      return { renter: r, items, total: items.reduce((s, it) => s + Number(it.price || 0), 0) };
+    })
+    .filter((g) => g.items.length > 0);
+
+  useEffect(() => {
+    // keep rentalsByRenterState in sync (optional)
+    setRentalsByRenterState(rentalsByRenter);
+  }, [usersList, rentals]);
+
+  useEffect(() => {
+    if (!ownerId) return;
+    // listen to owner doc if exists (safe-guard)
+    try {
+      const ownerRef = doc(db, "owners", ownerId);
+      const unsubscribe = onSnapshot(ownerRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setTotalEarnings(docSnap.data().totalEarnings || 0);
+        }
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      // owners collection might not exist; ignore
+    }
+  }, [ownerId]);
+
+  const openRentalModal = (rental, renter) => {
+    setRentalModal({
+      ...rental,
+      renterPhoneNumber: rental.renterPhoneNumber || rental.phoneNumber || renter?.phoneNumber || "N/A",
+      renterName: rental.renterName || rental.renterDisplayName || renter?.displayName || rental.renterEmail
+    });
+  };
+
+  const closeRentalModal = () => {
+    setRentalModal(null);
+    setRentalStatusEdit("");
+  };
+
+  const updateRentalStatus = async (rentalId, status) => {
+    if (!rentalId || !status) return;
+    try {
+      const rentalRef = doc(db, "rentals", rentalId);
+      const rentalSnap = await getDoc(rentalRef);
+      if (!rentalSnap.exists()) return console.error("Rental not found");
+
+      const rentalData = rentalSnap.data();
+      await updateDoc(rentalRef, { status, updatedAt: serverTimestamp() });
+
+      // If Completed, update owner's earnings (if owners collection exists)
+      if (status === "Completed") {
+        let ownerRef = null;
+        let ownerData = null;
+
+        if (rentalData.ownerId) {
+          ownerRef = doc(db, "owners", rentalData.ownerId);
+          const ownerSnap = await getDoc(ownerRef);
+          if (!ownerSnap.exists()) {
+            ownerRef = null;
+          } else ownerData = ownerSnap.data();
+        }
+
+        if (!ownerRef && rentalData.ownerEmail) {
+          const ownerQuery = query(collection(db, "owners"), where("email", "==", rentalData.ownerEmail));
+          const ownerSnap = await getDocs(ownerQuery);
+          if (!ownerSnap.empty) {
+            ownerRef = ownerSnap.docs[0].ref;
+            ownerData = ownerSnap.docs[0].data();
+          }
+        }
+
+        if (ownerRef) {
+          const earningsToAdd = Number(rentalData.price || 0);
+          await updateDoc(ownerRef, {
+            earnings: (ownerData?.earnings || 0) + earningsToAdd,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error updating rental status:", err);
+    }
+  };
+
+  const removeRental = async (rentalId) => {
+    // update local grouping state first
+    setRentalsByRenterState((prev) =>
+      prev
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((it) => it.id !== rentalId),
+          total: group.items.filter((it) => it.id !== rentalId).reduce((s, it) => s + Number(it.price || 0), 0),
+        }))
+        .filter((group) => group.items.length > 0)
+    );
+
+    closeRentalModal();
+
+    try {
+      const rentalRef = doc(db, "rentals", rentalId);
+      await deleteDoc(rentalRef);
+      console.log(`Rental ${rentalId} removed`);
+    } catch (err) {
+      console.error("Error removing rental:", err);
+    }
+  };
+
+  /* ---------------- gcash settings fetch ---------------- */
+  useEffect(() => {
+    const fetchGcashInfo = async () => {
+      try {
+        const docRef = doc(db, "settings", "gcash");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setGcashAccountName(data.accountName || "");
+          setGcashPhoneNumber(data.phoneNumber || "");
+        }
+      } catch (e) {
+        // ignore fetch errors
+      }
+    };
+    fetchGcashInfo();
+  }, []);
+
+  /* ---------------- remove property helper ---------------- */
+  const handleRemoveProperty = async () => {
+    if (!selectedProperty) return;
+    try {
+      const confirmDelete = window.confirm(`Are you sure you want to remove "${selectedProperty.name || 'this property'}"?`);
+      if (!confirmDelete) return;
+
+      await deleteDoc(doc(db, "properties", selectedProperty.id));
+
+      setFilteredProperties((prev) => prev.filter((p) => p.id !== selectedProperty.id));
+      setSelectedProperty(null);
+      alert("✅ Property removed successfully!");
+    } catch (err) {
+      console.error("Error removing property:", err);
+      alert("❌ Failed to remove property: " + err.message);
+    }
+  };
+
+  // placeholder state used by remove property flow (keeps parity with your earlier code)
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [propertyToRemove, setPropertyToRemove] = useState(null);
+  const [selectedProperty, setSelectedProperty] = useState(null);
+
+  useEffect(() => {
+    if (!showRemoveModal) return;
+    const timer = setTimeout(() => {
+      setShowRemoveModal(false);
+      setPropertyToRemove(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [showRemoveModal]);
+
+
+  const [adminMessages, setAdminMessages] = useState([]);
+const [selectedOwner, setSelectedOwner] = useState(null);
+const [adminReplyText, setAdminReplyText] = useState({});
+const adminEmail = adminUser?.email;
+
+useEffect(() => {
+  if (!adminEmail) return;
+
+  const unsub = onSnapshot(collection(db, "messages"), (snap) => {
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Admin only chats with owners
+    const filtered = all.filter(
+      m =>
+        m.sender === adminEmail ||
+        m.receiver === adminEmail
+    );
+
+    // Sort newest first
+    filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+    setAdminMessages(filtered);
+  });
+
+  return () => unsub();
+}, [adminEmail]);
+
+
+const handleAdminSendMessage = async (ownerEmail) => {
+  const text = adminReplyText[ownerEmail]?.trim();
+  if (!text) return alert("Message is empty");
+
+  await addDoc(collection(db, "messages"), {
+    sender: adminEmail,
+    receiver: ownerEmail,
+    text,
+    createdAt: serverTimestamp(),
+  });
+
+  setAdminReplyText(prev => ({ ...prev, [ownerEmail]: "" }));
+};
+
+const handleAdminReply = async (ownerEmail) => {
+  const text = adminReplyText[ownerEmail]?.trim();
+  if (!text) return alert("Message empty");
+
+  await addDoc(collection(db, "messages"), {
+    sender: adminEmail,
+    receiver: ownerEmail,
+    text,
+    createdAt: serverTimestamp(),
+  });
+
+  setAdminReplyText(prev => ({ ...prev, [ownerEmail]: "" }));
+};
+const handleAdminDeleteConversation = async (ownerEmail) => {
+  if (!window.confirm("Delete entire conversation?")) return;
+
+  const snap = await getDocs(collection(db, "messages"));
+
+  const convo = snap.docs.filter(
+    (d) =>
+      (d.data().sender === adminEmail && d.data().receiver === ownerEmail) ||
+      (d.data().sender === ownerEmail && d.data().receiver === adminEmail)
+  );
+
+  await Promise.all(convo.map(d => deleteDoc(doc(db, "messages", d.id))));
+
+  setAdminMessages(prev =>
+    prev.filter(
+      m =>
+        !(m.sender === ownerEmail && m.receiver === adminEmail) &&
+        !(m.sender === adminEmail && m.receiver === ownerEmail)
+    )
+  );
+
+  setSelectedOwner(null);
+};
+
+// ---------------- ADMIN → OWNER / RENTER SEND MESSAGE ----------------
+const handleSendMessage = async (receiverEmail) => {
+  const text = replyText[receiverEmail]?.trim();
+  if (!text) return alert("Cannot send empty message");
+
+  try {
+    await addDoc(collection(db, "messages"), {
+      sender: adminEmail,         // ADMIN EMAIL
+      receiver: receiverEmail,    // OWNER OR RENTER EMAIL
+      text,
+      createdAt: serverTimestamp(),
+    });
+
+    // clear input
+    setReplyText((prev) => ({ ...prev, [receiverEmail]: "" }));
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to send message");
+  }
+};
+
+  /* ---------------- render ---------------- */
+  return (
+    <div className="dashboard-content admin-dashboard">
+      <Sidebar userType="admin" activePage={activePage} setActivePage={setActivePage} onLogout={onLogout} />
+
+      <div className="main-dashboard">
+        {/* Admin Profile */}
+        {activePage === "adminProfile" && (
+          <section className="profile-section">
+            <h2>Admin Profile</h2>
+            {adminUser ? (
+              <div className="profile-container">
+                <div className="profile-preview">
+                  <img src={photoPreview} alt="Profile" className="profile-img" />
+                  <div className="profile-info">
+                    <p>Name: {adminUser.displayName || "No Name"}</p>
+                    <p>Email: {adminUser.email}</p>
+                    <p>Joined: {adminUser.metadata?.creationTime ? new Date(adminUser.metadata.creationTime).toLocaleDateString() : "N/A"}</p>
+                  </div>
+                </div>
+
+                {!isEditing ? (
+                  <div style={{ marginTop: 12 }}>
+                    <button onClick={() => setIsEditing(true)}>Edit Profile</button>
+                  </div>
+                ) : (
+                  <div className="profile-form">
+                    <label>Full Name</label>
+                    <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+
+                    <label>Profile Photo</label>
+                    <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+
+                    {/* NEW GCASH INFO FIELDS */}
+                    <label>GCash Account Name</label>
+                    <input type="text" value={gcashAccountName} onChange={(e) => setGcashAccountName(e.target.value)} />
+
+                    <label>GCash Phone Number</label>
+                    <input type="text" value={gcashPhoneNumber} onChange={(e) => setGcashPhoneNumber(e.target.value)} />
+
+                    <div style={{ marginTop: 8 }}>
+                      <button onClick={handleSaveProfile} disabled={loading}>
+                        {loading ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditing(false);
+                          setPhotoFile(null);
+                          setPhotoPreview(adminUser.photoURL || "/default-profile.png");
+                          setDisplayName(adminUser.displayName || "");
+                          // reset to last saved (keep values as-is)
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p>Loading profile...</p>
+            )}
+          </section>
+        )}
+
+        {/* Dashboard overview */}
+        {activePage === "dashboard" && (
+          <section className="overview-section">
+            <h2>Admin Dashboard Overview</h2>
+            <div className="overview-stats">
+              <div className="stat-card" onClick={() => setActivePage("properties")}>
+                <h3>Properties</h3>
+                <p>Total: {properties.length}</p>
+                <small>Pending: {propertyStats.pending} · Approved: {propertyStats.approved} · Rejected: {propertyStats.rejected}</small>
+              </div>
+              <div className="stat-card" onClick={() => setActivePage("users")}>
+                <h3>Users</h3>
+                <p>Total: {owners.length + renters.length}</p>
+                <small>Owners: {owners.length} · Renters: {renters.length}</small>
+              </div>
+              <div className="stat-card" onClick={() => setActivePage("myrentals")}>
+                <h3>My Rentals</h3>
+                <p>{rentals.length}</p>
+              </div>
+              <div className="stat-card" onClick={() => setActivePage("transactions")}>
+                <h3>Transactions</h3>
+                <p>{withdrawals.length}</p>
+              </div>
+              <div className="stat-card" onClick={() => setActivePage("messages")}>
+                <h3>Messages</h3>
+                <p>{new Set(messages.flatMap((m) => m.participants || [])).size}</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Properties */}
+        {activePage === "properties" && (
+          <section className="properties-section">
+            <h2 className="properties-title">🏠 Properties</h2>
+
+            {loading ? (
+              <p>Loading properties...</p>
+            ) : (
+              <>
+                <div className="filter-section">
+                  <label>Filter by status:</label>
+                  <select
+                    value={propertyFilter}
+                    onChange={(e) => setPropertyFilter(e.target.value)}
+                  >
+                    <option value="all">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <div className="properties-list">
+                  {filteredProperties.map((p) => (
+                    <div key={p.id} className="property-card">
+                      <div className="property-image-wrapper">
+                        <img src={p.imageUrl || "/no-image.png"} alt={p.name} className="property-image" />
+                      </div>
+
+                      <div className="property-main">
+                        <h3>{p.name}</h3>
+                        <p>Owner: {p.ownerName || p.ownerEmail || "Unknown"}</p>
+                        <p>Price: {p.price ? `₱${p.price}` : "N/A"}</p>
+                        <p>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</p>
+                        <p>Status: {p.status || "N/A"}</p>
+
+                        <div className="status-badges">
+                          <button onClick={() => updatePropertyStatus(p.id, "pending")}>Pending</button>
+                          <button onClick={() => updatePropertyStatus(p.id, "approved")}>Approve</button>
+                          <button onClick={() => updatePropertyStatus(p.id, "rejected")}>Reject</button>
+                        </div>
+
+                        <button
+                          className="remove-btn"
+                          onClick={async () => {
+                            const confirmDelete = window.confirm(`Are you sure you want to remove "${p.name}"?`);
+                            if (!confirmDelete) return;
+                            try {
+                              await deleteDoc(doc(db, "properties", p.id));
+                              setProperties((prev) => prev.filter((prop) => prop.id !== p.id));
+                              setFilteredProperties((prev) => prev.filter((prop) => prop.id !== p.id));
+                              alert("✅ Property removed successfully!");
+                            } catch (err) {
+                              console.error(err);
+                              alert("❌ Failed to remove property: " + err.message);
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* Users */}
+        {activePage === "users" && (
+          <section className="users-section">
+            <h2>Users</h2>
+
+            <div className="users-container">
+              <div className="users-list">
+                <h3>Owners ({owners.length})</h3>
+                {owners.map((o) => (
+                  <div
+                    key={o.uid}
+                    className={`user-item ${selectedUser?.uid === o.uid ? "active" : ""}`}
+                    onClick={() => openUserDetails(o)}
+                  >
+                    <strong>{o.displayName || o.name || o.email}</strong>
+                  </div>
+                ))}
+
+                <h3>Renters ({renters.length})</h3>
+                {renters.map((r) => (
+                  <div
+                    key={r.uid}
+                    className={`user-item ${selectedUser?.uid === r.uid ? "active" : ""}`}
+                    onClick={() => openUserDetails(r)}
+                  >
+                    <strong>{r.displayName || r.name || r.email}</strong>
+                  </div>
+                ))}
+              </div>
+
+              {selectedUser && (
+                <div className="user-details-panel">
+                  <div className="panel-header">
+                    <h3>{selectedUser.displayName || selectedUser.email}</h3>
+                    <button className="close-btn" onClick={closeUserDetails}>✖</button>
+                  </div>
+
+                  <p><strong>Email:</strong> {selectedUser.email}</p>
+                  <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleString() : formatDate(selectedUser.createdAt)}</p>
+                  <p><strong>Role:</strong> {selectedUser.role || "N/A"}</p>
+
+                  {selectedUser.role === "owner" && (
+                    <>
+                      <h4>Owner's Properties</h4>
+                      {properties.filter((p) => p.ownerEmail === selectedUser.email).length === 0 ? (
+                        <p>No properties</p>
+                      ) : (
+                        properties.filter((p) => p.ownerEmail === selectedUser.email).map((p) => (
+                          <div key={p.id} className="property-card small">
+                            <img src={p.imageUrl || "/no-image.png"} alt={p.name} />
+                            <div>
+                              <strong>{p.name}</strong>
+                              <div>Status: {p.status}</div>
+                              <div>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </>
+                  )}
+
+                  {selectedUser.role === "renter" && (
+                    <>
+                      <h4>Renter's Rentals</h4>
+                      {rentals.filter((r) => r.renterEmail === selectedUser.email).length === 0 ? (
+                        <p>No rentals</p>
+                      ) : (
+                        rentals.filter((r) => r.renterEmail === selectedUser.email).map((r) => (
+                          <div key={r.id} className="rental-item">
+                            <img src={r.imageUrl || "/no-image.png"} alt={r.propertyName} />
+                            <div>
+                              <strong>{r.propertyName}</strong>
+                              <div>Total: ₱{r.price || 0}</div>
+                              <div>Status: <button onClick={() => openRentalModal(r)}>{r.status || "N/A"}</button></div>
+                              <div>Ordered: {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : formatDate(r.createdAt)}</div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </>
+                  )}
+
+                  <div className="message-input">
+                    <input
+                      type="text"
+                      placeholder="Type message..."
+                      value={replyText[selectedUser.uid] || ""}
+                      onChange={(e) => setReplyText((p) => ({ ...p, [selectedUser.uid]: e.target.value }))}
+                    />
+                    <button onClick={() => handleSendMessage(selectedUser.uid)}>Send</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* My Rentals */}
+        {activePage === "myrentals" && (
+          <section className="admin-myrentals-section">
+            <h2>My Rentals (Grouped by Renter)</h2>
+
+            {rentalsByRenter.length === 0 ? (
+              <p>No rentals yet.</p>
+            ) : (
+              rentalsByRenter.map((group) => (
+                <div key={group.renter.uid || group.renter.email} className="admin-renter-group">
+                  <div className="admin-renter-total">
+                    <strong>Total Rentals:</strong> ₱{group.total}
+                  </div>
+
+                  <div className="admin-renter-items">
+                    {group.items.map((it) => (
+                      <div key={it.id} className="admin-rental-card">
+                        <img src={it.propertyImage || it.imageUrl || it.imageFile || "/no-image.png"} alt={it.propertyName || "Property"} className="admin-rental-image" />
+
+                        <div className="admin-rental-details">
+                          <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
+                          <div className="admin-rental-price">Price: ₱{it.price || 0}</div>
+                          <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
+                          <div className="admin-rental-status">
+                            Status:
+                            <button onClick={() => openRentalModal(it, group)} className="admin-rental-status-btn">{it.status || "N/A"}</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
+        )}
+
+        {/* Rental Modal */}
+        {rentalModal && (
+          <div className="admin-rental-modal">
+            <div className="admin-rental-modal-content">
+              <button onClick={closeRentalModal} className="admin-modal-close">✖</button>
+              <h3 className="rental-modal-title">{rentalModal?.propertyName || "N/A"}</h3>
+
+              <img src={rentalModal?.propertyImage || rentalModal?.imageUrl || rentalModal?.imageFile || "/no-image.png"} alt={rentalModal?.propertyName || "Property"} className="rental-modal-image" />
+
+              <div className="rental-modal-info">
+                <div className="rental-modal-item"><strong>Renter Name:</strong> {rentalModal?.renterName || rentalModal?.renterDisplayName || rentalModal?.renterEmail || "N/A"}</div>
+                <div className="rental-modal-item"><strong>Phone:</strong> {rentalModal?.renterPhone || rentalModal?.phoneNumber || rentalModal?.contactNumber || "N/A"}</div>
+                <div className="rental-modal-item"><strong>Address:</strong> {rentalModal?.address || "N/A"}</div>
+                <div className="rental-modal-item"><strong>Postal Code:</strong> {rentalModal?.postalCode || "N/A"}</div>
+                <div className="rental-modal-item"><strong>Place Name:</strong> {rentalModal?.placeName || "N/A"}</div>
+                <div className="rental-modal-item"><strong>Payment Method:</strong> {rentalModal?.paymentMethod || "N/A"}</div>
+              </div>
+
+              {rentalModal?.paymentMethod === "GCash" && rentalModal?.proofUrl && (
+                <div className="rental-modal-payment-proof">
+                  <strong>Payment Proof:</strong>
+                  <img src={rentalModal?.proofUrl} alt="Proof" className="rental-modal-proof-image" />
+                </div>
+              )}
+
+              <div className="rental-modal-item"><strong>Admin Commission:</strong> ₱{rentalModal?.adminCommission || 0}</div>
+              <div className="rental-modal-item"><strong>Total Price:</strong> ₱{rentalModal?.totalPrice || rentalModal?.price || 0}</div>
+
+              <label className="rental-modal-label">Update Status:</label>
+              <select value={rentalStatusEdit} onChange={(e) => setRentalStatusEdit(e.target.value)} className="rental-modal-select">
+                <option value="">--Select--</option>
+                <option value="To Pay">To Pay</option>
+                <option value="To Ship">To Ship</option>
+                <option value="To Receive">To Receive</option>
+                <option value="Completed">Completed</option>
+                <option value="Returned">Returned</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+
+              <div className="rental-modal-actions">
+                <button onClick={() => updateRentalStatus(rentalModal?.id, rentalStatusEdit)} className="rental-modal-update-btn">Update</button>
+                <button onClick={() => removeRental(rentalModal?.id)} className="rental-modal-remove-btn">Remove</button>
+                <button onClick={closeRentalModal} className="rental-modal-close-btn">Close</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transactions */}
+        {activePage === "transactions" && (
+          <section className="transactions-section">
+            <h2>Owner Withdrawals</h2>
+            {withdrawals.length === 0 ? (
+              <p>No withdrawals yet.</p>
+            ) : (
+              withdrawals.map((w) => (
+                <div key={w.id} className="withdrawal-card">
+                  <div className="withdrawal-owner">
+                    <strong>Owner:</strong> {w.ownerEmail || "N/A"}
+                  </div>
+
+                  <div className="withdrawal-amount">
+                    <strong>Amount:</strong> ₱{Number(w.amount || 0).toFixed(2)}
+                  </div>
+
+                  <div className="withdrawal-status">
+                    <strong>Status:</strong>{" "}
+                    <span className="withdrawal-status-toggle" onClick={() => setExpandedWithdrawal(expandedWithdrawal === w.id ? null : w.id)}>
+                      {w.status || "pending"}
+                    </span>
+                  </div>
+
+                  {expandedWithdrawal === w.id && (
+                    <div className="withdrawal-expanded">
+                      <div><strong>Payment Method:</strong> {w.method || "N/A"}</div>
+                      <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
+                      <div><strong>Phone Number:</strong> {w.phone || "N/A"}</div>
+
+                      {w.status === "pending" && (
+                        <div className="withdrawal-actions">
+                          <label>
+                            Confirm Amount:
+                            <input
+                              type="number"
+                              value={w.confirmAmount ?? w.amount}
+                              onChange={(e) => {
+                                const updatedAmount = Number(e.target.value);
+                                setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, confirmAmount: updatedAmount } : item)));
+                              }}
+                              className="withdrawal-confirm-input"
+                            />
+                          </label>
+
+                          <button onClick={() => approveWithdrawal(w)} className="withdrawal-approve-btn">Approve</button>
+                          <button onClick={() => rejectWithdrawal(w)} className="withdrawal-reject-btn">Reject</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </section>
+        )}
+
+       {activePage === "messages" && (
+  <div className="admin-messages-page">
+    <h1>Admin Messages</h1>
+
+    <div className="admin-messages-container">
+      {/* CONVERSATION LIST */}
+      <div className="conversation-list">
+        <h3>Owners</h3>
+
+        {Array.from(
+          new Set(
+            adminMessages.map(m =>
+              m.sender === adminEmail ? m.receiver : m.sender
+            )
+          )
+        ).map(owner => (
+          <div
+            key={owner}
+            className={`conversation-item ${
+              selectedOwner === owner ? "active" : ""
+            }`}
+            onClick={() => setSelectedOwner(owner)}
+          >
+            {owner}
+          </div>
+        ))}
+      </div>
+
+      {/* CHAT WINDOW */}
+      <div className="chat-window">
+        {selectedOwner ? (
+          <>
+            <div className="chat-header">
+              <h3>Chat with {selectedOwner}</h3>
+
+              <button
+                onClick={() => handleAdminDeleteConversation(selectedOwner)}
+              >
+                🗑 Delete
+              </button>
+
+              <button onClick={() => setSelectedOwner(null)}>✖ Close</button>
+            </div>
+
+            <div className="chat-messages">
+              {adminMessages
+                .filter(
+                  m =>
+                    (m.sender === selectedOwner ||
+                      m.receiver === selectedOwner)
+                )
+                .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+                .map(m => (
+                  <div
+                    key={m.id}
+                    className={`chat-bubble ${
+                      m.sender === adminEmail ? "sent" : "received"
+                    }`}
+                  >
+                    <p>{m.text}</p>
+                    <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+                  </div>
+                ))}
+            </div>
+
+            {/* INPUT */}
+            <div className="chat-input">
+              <input
+                type="text"
+                placeholder="Type a message..."
+                value={adminReplyText[selectedOwner] || ""}
+                onChange={e =>
+                  setAdminReplyText(prev => ({
+                    ...prev,
+                    [selectedOwner]: e.target.value,
+                  }))
+                }
+                onKeyDown={e =>
+                  e.key === "Enter" && handleAdminReply(selectedOwner)
+                }
+              />
+
+              <button onClick={() => handleAdminReply(selectedOwner)}>
+                Send
+              </button>
+            </div>
+          </>
+        ) : (
+          <p>Select an owner to start messaging</p>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;
