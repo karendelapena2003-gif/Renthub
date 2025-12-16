@@ -1,5 +1,5 @@
 /* ======== MAIN LAYOUT ======== */
-.dashboard-container.admin-dashboard {
+.dashboard-content.admin-dashboard {
   display: flex;
   height: 100vh;
   overflow: hidden;
@@ -7,7 +7,7 @@
 }
 
 /* ======== FIXED SIDEBAR ======== */
-.dashboard-container.admin-dashboard .sidebar {
+.dashboard-content.admin-dashboard .sidebar {
   width: 240px;
   min-width: 240px;
   background: #0ea5e9; /* sky blue */
@@ -54,9 +54,48 @@
   background: #f7f9fb;
 }
 
+/* ===== MENU TOGGLE BUTTON ===== */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  z-index: 1001;
+  font-size: 18px;
+}
+
+/* ===== RESPONSIVE SIDEBAR ===== */
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: block;
+  }
+
+  .dashboard-content.admin-dashboard .sidebar {
+    position: fixed;
+    left: -240px;
+    transition: left 0.3s ease;
+    z-index: 1000;
+  }
+
+  .dashboard-content.admin-dashboard .sidebar.open {
+    left: 0;
+  }
+
+  .dashboard-content.admin-dashboard {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 /* ======== RESPONSIVE SIDEBAR & CONTENT ======== */
 @media (max-width: 900px) {
-  .dashboard-container.admin-dashboard .sidebar {
+  .dashboard-content.admin-dashboard .sidebar {
     width: 220px;
     min-width: 220px;
   }
@@ -68,7 +107,7 @@
 }
 
 @media (max-width: 650px) {
-  .dashboard-container.admin-dashboard .sidebar {
+  .dashboard-content.admin-dashboard .sidebar {
     width: 200px;
     min-width: 200px;
   }
@@ -80,7 +119,7 @@
 }
 
 @media (max-width: 500px) {
-  .dashboard-container.admin-dashboard .sidebar {
+  .dashboard-content.admin-dashboard .sidebar {
     width: 180px;
     min-width: 180px;
   }

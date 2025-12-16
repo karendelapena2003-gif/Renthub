@@ -38,6 +38,7 @@ const OwnerDashboard = ({ onLogout }) => {
   const ownerEmail = user?.email || "owner@gmail.com";
   const currentUser = auth.currentUser;
   const ownerId = currentUser?.uid;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   // ---------- Firestore listeners ----------
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -432,14 +433,20 @@ const handleDeleteConversation = async (chatUserEmail) => {
   // ---------- JSX ----------
   return (
     <div className="dashboard-container owner-dashboard">
+  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+    ☰
+  </button>
+  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
   <Sidebar
     userType="owner"
     activePage={activePage}
     setActivePage={setActivePage}
     onLogout={onLogout}
+    isOpen={sidebarOpen}
+    onToggle={() => setSidebarOpen(false)}
   />
 
-  <div className="dashboard-content">
+  <div className="dashboard-content" onClick={() => setSidebarOpen(false)}>
     {/* OWNER PROFILE */}
     {activePage === "ownerProfile" && (
       <section className="profile-section">

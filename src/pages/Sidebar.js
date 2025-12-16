@@ -2,7 +2,7 @@
 import React from "react";
 import "./Sidebar.css";
 
-const Sidebar = ({ userType, setActivePage, activePage, onLogout }) => {
+const Sidebar = ({ userType, setActivePage, activePage, onLogout, isOpen, onToggle }) => {
   const menus = {
     admin: [
       { key: "adminProfile", label: "Admin Profile" },
@@ -47,7 +47,7 @@ const Sidebar = ({ userType, setActivePage, activePage, onLogout }) => {
   });
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <h1 className="logo"> RentHub</h1>
 
       <ul className="menu-list">
@@ -56,7 +56,10 @@ const Sidebar = ({ userType, setActivePage, activePage, onLogout }) => {
           <li
             key={item.key}
             className={activePage === item.key ? "active" : ""}
-            onClick={() => setActivePage(item.key)}
+            onClick={() => {
+              setActivePage(item.key);
+              onToggle(); // Close sidebar on page click
+            }}
           >
             {item.label}
           </li>
@@ -73,7 +76,10 @@ const Sidebar = ({ userType, setActivePage, activePage, onLogout }) => {
                   <li
                     key={item.key}
                     className={activePage === item.key ? "active" : ""}
-                    onClick={() => setActivePage(item.key)}
+                    onClick={() => {
+                      setActivePage(item.key);
+                      onToggle(); // Close sidebar on page click
+                    }}
                   >
                     {item.label}
                   </li>

@@ -39,6 +39,7 @@ const RenterDashboard = () => {
 const [activePage, setActivePage] = useState("renterProfile");
 const [user, setUser] = useState(null);
 const [loading, setLoading] = useState(false);
+const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Profile edit
   const [isEditing, setIsEditing] = useState(false);
@@ -982,11 +983,17 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
 
   return (
 <div className="dashboard-container renter-dashboard">
+  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+    ☰
+  </button>
+  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
   <Sidebar
     userType="renter"
     activePage={activePage}
     setActivePage={setActivePage}
     onLogout={() => signOut(auth)}
+    isOpen={sidebarOpen}
+    onToggle={() => setSidebarOpen(!sidebarOpen)}
   />
 
   <div className="dashboard-content">

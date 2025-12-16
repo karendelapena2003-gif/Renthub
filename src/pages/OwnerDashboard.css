@@ -7,6 +7,45 @@
   overflow-x: hidden;
 }
 
+/* ===== MENU TOGGLE BUTTON ===== */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  z-index: 1001;
+  font-size: 18px;
+}
+
+/* ===== RESPONSIVE SIDEBAR ===== */
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: block;
+  }
+
+  .owner-dashboard .sidebar {
+    position: fixed;
+    left: -240px;
+    transition: left 0.3s ease;
+    z-index: 1000;
+  }
+
+  .owner-dashboard .sidebar.open {
+    left: 0;
+  }
+
+  .owner-dashboard .dashboard-content {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 /* ===== SIDEBAR ADJACENT CONTENT ===== */
 .owner-dashboard .dashboard-content {
   flex: 1;

@@ -50,6 +50,7 @@ const AdminDashboard = ({ onLogout }) => {
 
   /* ---------------- UI/navigation ---------------- */
   const [activePage, setActivePage] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   /* ---------------- modals / details ---------------- */
@@ -524,7 +525,11 @@ const handleSendMessage = async (receiverEmail) => {
   /* ---------------- render ---------------- */
   return (
     <div className="dashboard-content admin-dashboard">
-      <Sidebar userType="admin" activePage={activePage} setActivePage={setActivePage} onLogout={onLogout} />
+  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+    ☰
+  </button>
+  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+      <Sidebar userType="admin" activePage={activePage} setActivePage={setActivePage} onLogout={onLogout} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
 
       <div className="main-dashboard">
         {/* Admin Profile */}
