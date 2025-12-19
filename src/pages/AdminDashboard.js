@@ -206,59 +206,6 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
-  /* ---------------- withdrawals ---------------- */
-  const approveWithdrawal = async (w) => {
-    try {
-      const withdrawalRef = doc(db, "withdrawals", w.id);
-      await updateDoc(withdrawalRef, {
-        status: "approved",
-        confirmAmount: w.confirmAmount ?? w.amount,
-        approvedAt: serverTimestamp(),
-      });
-
-      // Optionally update owner's earnings in owners collection if such exists
-      if (w.ownerId) {
-        const ownerRef = doc(db, "owners", w.ownerId);
-        try {
-          await updateDoc(ownerRef, {
-            earnings: increment(0) // no-op unless you want to change stored earnings
-          });
-        } catch (e) {
-          // safe to ignore if owners collection not used
-        }
-      }
-
-      setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, status: "approved", confirmAmount: w.confirmAmount ?? w.amount } : item)));
-      alert("✅ Withdrawal approved successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("❌ Failed to approve withdrawal");
-    }
-  };
-
-  const rejectWithdrawal = async (w) => {
-    try {
-      const withdrawalRef = doc(db, "withdrawals", w.id);
-      await updateDoc(withdrawalRef, { status: "rejected", rejectedAt: serverTimestamp() });
-
-      // Refund to owner's earnings if ownerId present
-      if (w.ownerId && typeof w.amount === "number") {
-        const ownerRef = doc(db, "owners", w.ownerId);
-        try {
-          await updateDoc(ownerRef, { earnings: increment(w.amount) });
-        } catch (e) {
-          // ignore if owners collection not present
-        }
-      }
-
-      setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, status: "rejected" } : item)));
-      alert("❌ Withdrawal rejected and amount refunded to owner");
-    } catch (err) {
-      console.error(err);
-      alert("❌ Failed to reject withdrawal");
-    }
-  };
-
   
   /* ---------------- rentals grouping & modal helpers ---------------- */
   const rentalsByRenter = usersList
@@ -426,17 +373,18 @@ const [selectedOwner, setSelectedOwner] = useState(null);
 const [adminReplyText, setAdminReplyText] = useState({});
 const adminEmail = adminUser?.email;
 
+// Listen for admin-owner messages only
 useEffect(() => {
   if (!adminEmail) return;
 
   const unsub = onSnapshot(collection(db, "messages"), (snap) => {
     const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Admin only chats with owners
+    // Filter only messages involving admin & owners
     const filtered = all.filter(
       m =>
-        m.sender === adminEmail ||
-        m.receiver === adminEmail
+        (m.sender === adminEmail && m.receiverRole === "owner") ||
+        (m.receiver === adminEmail && m.senderRole === "owner")
     );
 
     // Sort newest first
@@ -448,7 +396,7 @@ useEffect(() => {
   return () => unsub();
 }, [adminEmail]);
 
-
+// Send message from admin to owner
 const handleAdminSendMessage = async (ownerEmail) => {
   const text = adminReplyText[ownerEmail]?.trim();
   if (!text) return alert("Message is empty");
@@ -456,12 +404,15 @@ const handleAdminSendMessage = async (ownerEmail) => {
   await addDoc(collection(db, "messages"), {
     sender: adminEmail,
     receiver: ownerEmail,
+    senderRole: "admin",
+    receiverRole: "owner",
     text,
     createdAt: serverTimestamp(),
   });
 
   setAdminReplyText(prev => ({ ...prev, [ownerEmail]: "" }));
 };
+
 
 const handleAdminReply = async (ownerEmail) => {
   const text = adminReplyText[ownerEmail]?.trim();
@@ -476,13 +427,14 @@ const handleAdminReply = async (ownerEmail) => {
 
   setAdminReplyText(prev => ({ ...prev, [ownerEmail]: "" }));
 };
+// Delete entire conversation with owner
 const handleAdminDeleteConversation = async (ownerEmail) => {
-  if (!window.confirm("Delete entire conversation?")) return;
+  if (!window.confirm(`Delete conversation with ${ownerEmail}?`)) return;
 
   const snap = await getDocs(collection(db, "messages"));
 
   const convo = snap.docs.filter(
-    (d) =>
+    d =>
       (d.data().sender === adminEmail && d.data().receiver === ownerEmail) ||
       (d.data().sender === ownerEmail && d.data().receiver === adminEmail)
   );
@@ -500,27 +452,76 @@ const handleAdminDeleteConversation = async (ownerEmail) => {
   setSelectedOwner(null);
 };
 
-// ---------------- ADMIN → OWNER / RENTER SEND MESSAGE ----------------
-const handleSendMessage = async (receiverEmail) => {
-  const text = replyText[receiverEmail]?.trim();
+// Send message from Users panel to owner
+const handleSendMessage = async (ownerEmail) => {
+  const text = replyText[ownerEmail]?.trim();
   if (!text) return alert("Cannot send empty message");
 
   try {
     await addDoc(collection(db, "messages"), {
-      sender: adminEmail,         // ADMIN EMAIL
-      receiver: receiverEmail,    // OWNER OR RENTER EMAIL
+      sender: adminEmail,        // ADMIN email
+      receiver: ownerEmail,      // Always the owner's email
+      senderRole: "admin",
+      receiverRole: "owner",
       text,
       createdAt: serverTimestamp(),
     });
 
-    // clear input
-    setReplyText((prev) => ({ ...prev, [receiverEmail]: "" }));
+    // Clear input after sending
+    setReplyText(prev => ({ ...prev, [ownerEmail]: "" }));
 
   } catch (err) {
     console.error(err);
     alert("Failed to send message");
   }
 };
+// ---------------- WITHDRAWAL APPROVAL ----------------
+const approveWithdrawal = async (withdrawal) => {
+  const { id, ownerEmail, amount } = withdrawal;
+  try {
+    // Update withdrawal in Firestore
+    await updateDoc(doc(db, "withdrawals", id), {
+      status: "approved",
+      approvedAt: serverTimestamp(),
+      approvedBy: adminEmail,
+    });
+
+    // Automatically notify owner
+    await addDoc(collection(db, "messages"), {
+      sender: adminEmail,
+      receiver: ownerEmail,
+      senderRole: "admin",
+      receiverRole: "owner",
+      text: `Your withdrawal of ₱${amount} has been approved successfully.`,
+      createdAt: serverTimestamp(),
+    });
+
+    alert(`Withdrawal of ₱${amount} approved and owner notified.`);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to approve withdrawal");
+  }
+};
+
+const rejectWithdrawal = async (withdrawal) => {
+  const { id } = withdrawal;
+  if (!window.confirm("Are you sure you want to reject this withdrawal?")) return;
+
+  try {
+    await updateDoc(doc(db, "withdrawals", id), {
+      status: "rejected",
+      rejectedAt: serverTimestamp(),
+      rejectedBy: adminEmail,
+    });
+
+    alert("Withdrawal rejected successfully");
+  } catch (err) {
+    console.error(err);
+    alert("Failed to reject withdrawal");
+  }
+};
+
 
   /* ---------------- render ---------------- */
   return (
@@ -692,101 +693,77 @@ const handleSendMessage = async (receiverEmail) => {
         )}
 
         {/* Users */}
-        {activePage === "users" && (
-          <section className="users-section">
-            <h2>Users</h2>
+{activePage === "users" && (
+  <section className="users-section">
+    <h2>Users</h2>
 
-            <div className="users-container">
-              <div className="users-list">
-                <h3>Owners ({owners.length})</h3>
-                {owners.map((o) => (
-                  <div
-                    key={o.uid}
-                    className={`user-item ${selectedUser?.uid === o.uid ? "active" : ""}`}
-                    onClick={() => openUserDetails(o)}
-                  >
-                    <strong>{o.displayName || o.name || o.email}</strong>
-                  </div>
-                ))}
+    <div className="users-container">
+      <div className="users-list">
+        <h3>Owners ({owners.length})</h3>
+        {owners.map((o) => (
+          <div
+            key={o.uid}
+            className={`user-item ${selectedUser?.uid === o.uid ? "active" : ""}`}
+            onClick={() => setSelectedUser(o)}
+          >
+            <strong>{o.email}</strong> {/* Always show email */}
+          </div>
+        ))}
 
-                <h3>Renters ({renters.length})</h3>
-                {renters.map((r) => (
-                  <div
-                    key={r.uid}
-                    className={`user-item ${selectedUser?.uid === r.uid ? "active" : ""}`}
-                    onClick={() => openUserDetails(r)}
-                  >
-                    <strong>{r.displayName || r.name || r.email}</strong>
-                  </div>
-                ))}
-              </div>
+        <h3>Renters ({renters.length})</h3>
+        {renters.map((r) => (
+          <div
+            key={r.uid}
+            className={`user-item ${selectedUser?.uid === r.uid ? "active" : ""}`}
+            onClick={() => setSelectedUser(r)}
+          >
+            <strong>{r.email}</strong> {/* Always show email */}
+          </div>
+        ))}
+      </div>
 
-              {selectedUser && (
-                <div className="user-details-panel">
-                  <div className="panel-header">
-                    <h3>{selectedUser.displayName || selectedUser.email}</h3>
-                    <button className="close-btn" onClick={closeUserDetails}>✖</button>
-                  </div>
+      {selectedUser && selectedUser.role === "owner" && (
+        <div className="user-details-panel">
+          <div className="panel-header">
+            <h3>{selectedUser.email}</h3>
+            <button className="close-btn" onClick={() => setSelectedUser(null)}>✖</button>
+          </div>
 
-                  <p><strong>Email:</strong> {selectedUser.email}</p>
-                  <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleString() : formatDate(selectedUser.createdAt)}</p>
-                  <p><strong>Role:</strong> {selectedUser.role || "N/A"}</p>
+          <p><strong>Email:</strong> {selectedUser.email}</p>
+          <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleString() : formatDate(selectedUser.createdAt)}</p>
+          <p><strong>Role:</strong> {selectedUser.role}</p>
 
-                  {selectedUser.role === "owner" && (
-                    <>
-                      <h4>Owner's Properties</h4>
-                      {properties.filter((p) => p.ownerEmail === selectedUser.email).length === 0 ? (
-                        <p>No properties</p>
-                      ) : (
-                        properties.filter((p) => p.ownerEmail === selectedUser.email).map((p) => (
-                          <div key={p.id} className="property-card small">
-                            <img src={p.imageUrl || "/no-image.png"} alt={p.name} />
-                            <div>
-                              <strong>{p.name}</strong>
-                              <div>Status: {p.status}</div>
-                              <div>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </>
-                  )}
-
-                  {selectedUser.role === "renter" && (
-                    <>
-                      <h4>Renter's Rentals</h4>
-                      {rentals.filter((r) => r.renterEmail === selectedUser.email).length === 0 ? (
-                        <p>No rentals</p>
-                      ) : (
-                        rentals.filter((r) => r.renterEmail === selectedUser.email).map((r) => (
-                          <div key={r.id} className="rental-item">
-                            <img src={r.imageUrl || "/no-image.png"} alt={r.propertyName} />
-                            <div>
-                              <strong>{r.propertyName}</strong>
-                              <div>Total: ₱{r.price || 0}</div>
-                              <div>Status: <button onClick={() => openRentalModal(r)}>{r.status || "N/A"}</button></div>
-                              <div>Ordered: {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : formatDate(r.createdAt)}</div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </>
-                  )}
-
-                  <div className="message-input">
-                    <input
-                      type="text"
-                      placeholder="Type message..."
-                      value={replyText[selectedUser.uid] || ""}
-                      onChange={(e) => setReplyText((p) => ({ ...p, [selectedUser.uid]: e.target.value }))}
-                    />
-                    <button onClick={() => handleSendMessage(selectedUser.uid)}>Send</button>
-                  </div>
+          <h4>Owner's Properties</h4>
+          {properties.filter(p => p.ownerEmail === selectedUser.email).length === 0 ? (
+            <p>No properties</p>
+          ) : (
+            properties.filter(p => p.ownerEmail === selectedUser.email).map(p => (
+              <div key={p.id} className="property-card small">
+                <img src={p.imageUrl || "/no-image.png"} alt={p.name} />
+                <div>
+                  <strong>{p.name}</strong>
+                  <div>Status: {p.status}</div>
+                  <div>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</div>
                 </div>
-              )}
-            </div>
-          </section>
-        )}
+              </div>
+            ))
+          )}
+
+          <div className="message-input">
+            <input
+              type="text"
+              placeholder="Type message to owner..."
+              value={replyText[selectedUser.email] || ""} // Use email as key
+              onChange={e => setReplyText(prev => ({ ...prev, [selectedUser.email]: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && handleSendMessage(selectedUser.email)}
+            />
+            <button onClick={() => handleSendMessage(selectedUser.email)}>Send</button>
+          </div>
+        </div>
+      )}
+    </div>
+  </section>
+)}
 
         {/* My Rentals */}
         {activePage === "myrentals" && (
@@ -930,102 +907,65 @@ const handleSendMessage = async (receiverEmail) => {
           </section>
         )}
 
-       {activePage === "messages" && (
+      {activePage === "messages" && (
   <div className="admin-messages-page">
     <h1>Admin Messages</h1>
-
     <div className="admin-messages-container">
-      {/* CONVERSATION LIST */}
+      {/* Conversation List */}
       <div className="conversation-list">
         <h3>Owners</h3>
-
-        {Array.from(
-          new Set(
-            adminMessages.map(m =>
-              m.sender === adminEmail ? m.receiver : m.sender
-            )
-          )
-        ).map(owner => (
-          <div
-            key={owner}
-            className={`conversation-item ${
-              selectedOwner === owner ? "active" : ""
-            }`}
-            onClick={() => setSelectedOwner(owner)}
-          >
-            {owner}
-          </div>
+        {Array.from(new Set(adminMessages.map(m => m.sender === adminEmail ? m.receiver : m.sender)))
+          .map(owner => (
+            <div
+              key={owner}
+              className={`conversation-item ${selectedOwner === owner ? "active" : ""}`}
+              onClick={() => setSelectedOwner(owner)}
+            >
+              {owner} {/* Show owner email */}
+            </div>
         ))}
       </div>
 
-      {/* CHAT WINDOW */}
+      {/* Chat Window */}
       <div className="chat-window">
         {selectedOwner ? (
           <>
             <div className="chat-header">
               <h3>Chat with {selectedOwner}</h3>
-
-              <button
-                onClick={() => handleAdminDeleteConversation(selectedOwner)}
-              >
-                🗑 Delete
-              </button>
-
+              <button onClick={() => handleAdminDeleteConversation(selectedOwner)}>🗑 Delete</button>
               <button onClick={() => setSelectedOwner(null)}>✖ Close</button>
             </div>
 
             <div className="chat-messages">
               {adminMessages
-                .filter(
-                  m =>
-                    (m.sender === selectedOwner ||
-                      m.receiver === selectedOwner)
-                )
-                .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+                .filter(m => m.sender === selectedOwner || m.receiver === selectedOwner)
+                .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
                 .map(m => (
-                  <div
-                    key={m.id}
-                    className={`chat-bubble ${
-                      m.sender === adminEmail ? "sent" : "received"
-                    }`}
-                  >
+                  <div key={m.id} className={`chat-bubble ${m.sender === adminEmail ? "sent" : "received"}`}>
                     <p>{m.text}</p>
-                    <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+                    <small>{m.sender} | {m.createdAt?.toDate?.().toLocaleTimeString()}</small>
                   </div>
-                ))}
+              ))}
             </div>
 
-            {/* INPUT */}
             <div className="chat-input">
               <input
                 type="text"
                 placeholder="Type a message..."
                 value={adminReplyText[selectedOwner] || ""}
-                onChange={e =>
-                  setAdminReplyText(prev => ({
-                    ...prev,
-                    [selectedOwner]: e.target.value,
-                  }))
-                }
-                onKeyDown={e =>
-                  e.key === "Enter" && handleAdminReply(selectedOwner)
-                }
+                onChange={e => setAdminReplyText(prev => ({ ...prev, [selectedOwner]: e.target.value }))}
+                onKeyDown={e => e.key === "Enter" && handleAdminSendMessage(selectedOwner)}
               />
-
-              <button onClick={() => handleAdminReply(selectedOwner)}>
-                Send
-              </button>
+              <button onClick={() => handleAdminSendMessage(selectedOwner)}>Send</button>
             </div>
           </>
         ) : (
-          <p>Select an owner to start messaging</p>
+          <p>Select an owner to view messages</p>
         )}
       </div>
     </div>
   </div>
-)}
-
-      </div>
+)}     </div>
     </div>
   );
 };
