@@ -979,22 +979,42 @@ useEffect(() => {
 const [showCommentInput, setShowCommentInput] = useState({});
 const [showReplyInput, setShowReplyInput] = useState({});
 const [showCommentsSection, setShowCommentsSection] = useState({});
+  // ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
+  useEffect(() => {
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  }, [activePage]);
 
+  
 
   return (
 <div className="dashboard-container renter-dashboard">
-  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-    ☰
-  </button>
-  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+ <button
+  className="menu-toggle"
+  onClick={() => setSidebarOpen(true)}
+>
+  ☰
+</button>
+
+
+  {sidebarOpen && (
+    <div
+      className="sidebar-overlay"
+      onClick={() => setSidebarOpen(false)}
+    />
+  )}
+
   <Sidebar
-    userType="renter"
-    activePage={activePage}
-    setActivePage={setActivePage}
-    onLogout={() => signOut(auth)}
-    isOpen={sidebarOpen}
-    onToggle={() => setSidebarOpen(!sidebarOpen)}
-  />
+  userType="renter"
+  activePage={activePage}
+  setActivePage={setActivePage}
+  onLogout={() => signOut(auth)}
+  isOpen={sidebarOpen}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
+
+
 
   <div className="dashboard-content">
     {/* RENTER PROFILE */}

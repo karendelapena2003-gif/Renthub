@@ -1,1166 +1,471 @@
-/* ======== MAIN LAYOUT ======== */
-.dashboard-content.admin-dashboard {
+/* ====== COLORS (Admin Only) ====== */
+.admin-dashboard {
+  --primary-color: #4CAF50;
+  --secondary-color: #f4f4f4;
+  --text-color: #333;
+  --sidebar-bg: #2c3e50;
+  --sidebar-text: #fff;
+  --button-bg: #4CAF50;
+  --button-text: #fff;
+  --overlay-bg: rgba(0,0,0,0.45);
+}
+
+/* ====== MAIN LAYOUT ====== */
+.admin-dashboard .dashboard-container {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: #f7f9fb;
-}
-
-/* ======== FIXED SIDEBAR ======== */
-.dashboard-content.admin-dashboard .sidebar {
-  width: 240px;
-  min-width: 240px;
-  background: #0ea5e9; /* sky blue */
-  color: white;
-  height: 100vh;
-  position: fixed;
-  left: 0;
-  top: 0;
-  overflow-y: auto;
-  padding-top: 20px;
-  z-index: 800;
-}
-
-/* Sidebar Links */
-.sidebar a,
-.sidebar button {
-  display: block;
-  color: white;
-  text-decoration: none;
-  padding: 10px 20px;
-  margin-bottom: 6px;
-  border-radius: 6px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.sidebar a.active,
-.sidebar button.active {
-  background: #0284c7;
-}
-
-.sidebar a:hover,
-.sidebar button:hover {
-  background: #0284c7;
-}
-
-/* ======== CONTENT AREA ======== */
-.dashboard-content.admin-dashboard {
-  margin-left: 240px; /* same as sidebar width */
-  width: calc(100% - 240px);
-  padding: 20px;
-  height: 100vh;
-  overflow-y: auto;
-  background: #f7f9fb;
+  background-color: var(--secondary-color);
 }
 
 /* ===== MENU TOGGLE BUTTON ===== */
-.menu-toggle {
+.admin-dashboard .menu-toggle {
   display: none;
   position: fixed;
-  top: 10px;
-  left: 10px;
-  background: #1976d2;
-  color: white;
+  top: 15px;
+  left: 15px;
+  z-index: 1100;
+  font-size: 24px;
+  background-color: var(--primary-color);
+  color: var(--button-text);
   border: none;
-  padding: 10px;
-  border-radius: 5px;
+  padding: 8px 12px;
+  border-radius: 6px;
   cursor: pointer;
-  z-index: 1001;
-  font-size: 18px;
 }
 
-/* ===== RESPONSIVE SIDEBAR ===== */
-@media (max-width: 768px) {
-  .menu-toggle {
-    display: block;
-  }
+/* ===== SIDEBAR ===== */
+.admin-dashboard .sidebar {
+  width: 240px;
+  background-color: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  z-index: 1100;
+  overflow-y: auto;
+  transition: left 0.3s ease;
+  padding-top: 20px;
+}
 
-  .dashboard-content.admin-dashboard .sidebar {
-    position: fixed;
+.admin-dashboard .sidebar a {
+  display: block;
+  padding: 10px 20px;
+  text-decoration: none;
+  color: var(--sidebar-text);
+}
+
+.admin-dashboard .sidebar a.active {
+  background-color: var(--primary-color);
+}
+
+.admin-dashboard .sidebar.open {
+  left: 0;
+}
+
+/* ===== SIDEBAR OVERLAY ===== */
+.admin-dashboard .sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  z-index: 1000;
+}
+
+/* ===== DASHBOARD CONTENT ===== */
+.admin-dashboard .dashboard-content {
+  flex: 1;
+  margin-left: 240px;
+  padding: 20px;
+  overflow-y: auto;
+  transition: margin-left 0.3s ease;
+  background-color: var(--secondary-color);
+}
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 1024px) {
+  .admin-dashboard .sidebar {
     left: -240px;
-    transition: left 0.3s ease;
-    z-index: 1000;
   }
 
-  .dashboard-content.admin-dashboard .sidebar.open {
+  .admin-dashboard .sidebar.open {
     left: 0;
   }
 
-  .dashboard-content.admin-dashboard {
+  .admin-dashboard .menu-toggle {
+    display: block;
+  }
+
+  .admin-dashboard .sidebar.open ~ .sidebar-overlay {
+    display: block;
+  }
+
+  .admin-dashboard .dashboard-content {
     margin-left: 0;
-    width: 100%;
   }
 }
 
-/* ======== RESPONSIVE SIDEBAR & CONTENT ======== */
+/* ====== PROFILE, OVERVIEW, SECTIONS ====== */
+.admin-dashboard .profile-section,
+.admin-dashboard .overview-section,
+.admin-dashboard .properties-section,
+.admin-dashboard .users-section,
+.admin-dashboard .admin-myrentals-section,
+.admin-dashboard .transactions-section,
+.admin-dashboard .admin-messages-page {
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.admin-dashboard .profile-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.admin-dashboard .profile-preview {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.admin-dashboard .profile-img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.admin-dashboard .profile-info p {
+  margin: 4px 0;
+}
+
+.admin-dashboard .profile-form label {
+  display: block;
+  margin-top: 8px;
+}
+
+.admin-dashboard .profile-form input {
+  width: 100%;
+  padding: 6px 10px;
+  margin-top: 4px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+/* ====== STAT CARDS ====== */
+.admin-dashboard .overview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 15px;
+}
+
+.admin-dashboard .stat-card {
+  flex: 1 1 200px;
+  padding: 15px;
+  background: #e0f2fe;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.admin-dashboard .stat-card:hover {
+  transform: scale(1.03);
+  background: #bae6fd;
+}
+
+/* ====== PROPERTIES / USERS ====== */
+.admin-dashboard .properties-list,
+.admin-dashboard .users-list,
+.admin-dashboard .admin-renter-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.admin-dashboard .property-card {
+  background: #f1f5f9;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.admin-dashboard .property-card.small {
+  grid-template-columns: 1fr;
+}
+
+.admin-dashboard .property-image-wrapper img,
+.admin-dashboard .property-card img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.admin-dashboard .status-badges button {
+  margin-right: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.admin-dashboard .remove-btn {
+  margin-top: 8px;
+  background: #f87171;
+  color: white;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+/* ====== USERS LIST ====== */
+.admin-dashboard .users-container {
+  display: flex;
+  gap: 20px;
+}
+
+.admin-dashboard .users-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.admin-dashboard .user-item {
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #bae6fd;
+  transition: background 0.2s;
+}
+
+.admin-dashboard .user-item.active {
+  background: #0ea5e9;
+  color: white;
+}
+
+.admin-dashboard .user-details-panel {
+  flex: 2;
+  background: #f1f5f9;
+  padding: 15px;
+  border-radius: 12px;
+  overflow-y: auto;
+}
+
+.admin-dashboard .close-btn {
+  background: #f87171;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ====== RENTALS ====== */
+.admin-dashboard .admin-renter-group {
+  margin-bottom: 20px;
+}
+
+.admin-dashboard .admin-renter-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.admin-dashboard .admin-rental-card {
+  display: flex;
+  background: #e0f2fe;
+  border-radius: 12px;
+  overflow: hidden;
+  gap: 10px;
+  padding: 10px;
+}
+
+.admin-dashboard .admin-rental-image {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.admin-dashboard .admin-rental-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-dashboard .admin-rental-status-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #0ea5e9;
+  color: white;
+}
+
+/* ====== CHAT / MESSAGES ====== */
+.admin-dashboard .admin-messages-container {
+  display: flex;
+  gap: 15px;
+}
+
+.admin-dashboard .conversation-list {
+  flex: 0 0 250px;
+  background: #e0f2fe;
+  padding: 10px;
+  border-radius: 12px;
+  overflow-y: auto;
+}
+
+.admin-dashboard .conversation-item {
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #bae6fd;
+  transition: background 0.2s;
+}
+
+.admin-dashboard .conversation-item.active {
+  background: #0ea5e9;
+  color: white;
+}
+
+.admin-dashboard .chat-window {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.admin-dashboard .chat-header {
+  padding: 10px 15px;
+  background: #0ea5e9;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-dashboard .chat-messages {
+  flex: 1;
+  padding: 15px;
+  background: #f1f5f9;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-dashboard .chat-bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  word-wrap: break-word;
+}
+
+.admin-dashboard .chat-bubble.sent {
+  background: #0ea5e9;
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 0;
+}
+
+.admin-dashboard .chat-bubble.received {
+  background: #e2e8f0;
+  color: #111;
+  align-self: flex-start;
+  border-bottom-left-radius: 0;
+}
+
+.admin-dashboard .chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  border-top: 1px solid #cbd5e1;
+}
+
+.admin-dashboard .chat-input input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.admin-dashboard .chat-input button {
+  background: #0ea5e9;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+/* ====== BUTTONS ====== */
+.admin-dashboard button {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.admin-dashboard button:hover {
+  opacity: 0.9;
+}
+
+/* ====== RESPONSIVE ====== */
 @media (max-width: 900px) {
-  .dashboard-content.admin-dashboard .sidebar {
-    width: 220px;
-    min-width: 220px;
+  .admin-dashboard .admin-messages-container {
+    flex-direction: column;
   }
 
-  .dashboard-content.admin-dashboard {
-    margin-left: 220px;
-    width: calc(100% - 220px);
-  }
-}
-
-@media (max-width: 650px) {
-  .dashboard-content.admin-dashboard .sidebar {
-    width: 200px;
-    min-width: 200px;
+  .admin-dashboard .conversation-list {
+    flex-direction: row;
+    width: 100%;
+    overflow-x: auto;
+    height: 120px;
   }
 
-  .dashboard-content.admin-dashboard {
-    margin-left: 200px;
-    width: calc(100% - 200px);
+  .admin-dashboard .conversation-item {
+    min-width: 120px;
+    white-space: normal;
+  }
+
+  .admin-dashboard .admin-renter-items {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
 
 @media (max-width: 500px) {
-  .dashboard-content.admin-dashboard .sidebar {
-    width: 180px;
-    min-width: 180px;
+  .admin-dashboard .chat-window {
+    height: 350px;
   }
 
-  .dashboard-content.admin-dashboard {
-    margin-left: 180px;
-    width: calc(100% - 180px);
-  }
-}
-
-/* ======== PROFILE SECTION ======== */
-.profile-section {
-  max-width: 500px;
-  margin: 0 auto;
-  background: #a5d3f3;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-.profile-section h2 {
-  text-align: center;
-  color: #0f1112;
-  margin-bottom: 16px;
-}
-
-.profile-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.profile-img {
-  width: 100px;
-  height: 100px;
-  border-radius: 10px;
-  object-fit: cover;
-  border: 2px solid #0ea5e9;
-}
-
-.profile-info p {
-  font-size: 16px;
-  color: black;
-  margin: 4px 0;
-  text-align: center;
-}
-
-/* ======== BUTTONS ======== */
-button {
-  background: #0ea5e9;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-button:hover {
-  background: #0284c7;
-}
-
-button.cancel-btn {
-  background: #ef4444;
-}
-
-button.cancel-btn:hover {
-  background: #dc2626;
-}
-
-/* ======== DASHBOARD STAT CARDS ======== */
-.overview-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  justify-content: center;
-}
-
-.stat-card {
-  background: white;
-  padding: 16px;
-  border-radius: 10px;
-  min-width: 160px;
-  max-width: 200px;
-  text-align: center;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-}
-
-/* ======== PROPERTIES CARDS ======== */
-.properties-list,
-.rental-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 20px;
-  justify-items: center;
-}
-
-.property-card,
-.rental-card,
-.admin-rental-card {
-  background: white;
-  padding: 12px;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  width: 100%;
-  max-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-sizing: border-box;
-}
-
-.property-card img,
-.rental-card img,
-.admin-rental-card img {
-  width: 100%;
-  height: 140px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
-.status-badges button {
-  margin-right: 6px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-}
-
-.status-badges button:first-child { background: #facc15; color: #000; }
-.status-badges button:nth-child(2) { background: #22c55e; color: #fff; }
-.status-badges button:nth-child(3) { background: #ef4444; color: #fff; }
-
-/* ======== USERS LIST ======== */
-.users-container {
-  display: flex;
-  gap: 16px;
-}
-
-.users-list {
-  min-width: 200px;
-  max-width: 250px;
-  background: white;
-  padding: 12px;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  overflow-y: auto;
-  max-height: 500px;
-}
-
-.user-item {
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 4px;
-}
-
-.user-item.active,
-.user-item:hover {
-  background: #0ea5e9;
-  color: white;
-}
-
-/* User Details Panel */
-.user-details-panel {
-  flex: 1;
-  background: white;
-  padding: 16px;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-/* ======== CHAT & MESSAGES ======== */
-.messages-container {
-  display: flex;
-  gap: 16px;
-}
-
-.conversation-list {
-  min-width: 240px;
-  max-width: 280px;
-  background: white;
-  padding: 12px;
-  border-right: 2px solid #dbeafe;
-  overflow-y: auto;
-}
-
-.conversation-item {
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 4px;
-}
-
-.conversation-item.active {
-  background: #0ea5e9;
-  color: white;
-}
-
-.chat-window {
-  flex: 1;
-  background: white;
-  padding: 16px;
-  border-radius: 10px;
-  overflow-y: auto;
-  max-height: 600px;
-}
-
-/* Chat bubble */
-.chat-bubble {
-  max-width: 60%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-}
-
-.chat-bubble.sent {
-  background: #0ea5e9;
-  color: white;
-  margin-left: auto;
-}
-
-.chat-bubble.received {
-  background: #e0f2fe;
-  color: black;
-}
-
-.chat-input {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 8px;
-  border-radius: 6px;
-  border: 2px solid #0ea5e9;
-}
-
-/* ======== RESPONSIVE FIXES ======== */
-@media (max-width: 650px) {
-  .overview-stats,
-  .properties-list,
-  .rental-grid,
-  .users-container {
-    flex-direction: column;
-    align-items: center;
+  .admin-dashboard .chat-input input,
+  .admin-dashboard .chat-input button {
+    font-size: 12px;
+    padding: 6px 10px;
   }
 
-  .user-details-panel,
-  .chat-window {
-    max-width: 100%;
+  .admin-dashboard .admin-renter-items {
+    grid-template-columns: 1fr;
   }
-}
 
-.admin-messages-page {
-  padding: 20px;
-}
-
-.admin-messages-container {
-  display: flex;
-  gap: 20px;
-}
-
-.conversation-list {
-  width: 250px;
-  background: #edf2f7;
-  padding: 15px;
-  border-radius: 10px;
-  height: 500px;
-  overflow-y: auto;
-}
-
-.conversation-item {
-  padding: 10px;
-  background: #fff;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.conversation-item.active {
-  background: #3182ce;
-  color: white;
-}
-
-.chat-window {
-  flex: 1;
-  background: white;
-  border-radius: 10px;
-  padding: 15px;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  max-height: 400px;
-  padding-right: 5px;
-}
-
-.chat-bubble {
-  margin-bottom: 12px;
-  max-width: 70%;
-  padding: 10px;
-  border-radius: 10px;
-}
-
-.chat-bubble.sent {
-  margin-left: auto;
-  background: #3182ce;
-  color: white;
-}
-
-.chat-bubble.received {
-  background: #e2e8f0;
-}
-
-.chat-input {
-  display: flex;
-  gap: 10px;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 10px;
-  border-radius: 6px;
-}
-
-.chat-input button {
-  padding: 10px 20px;
-  border-radius: 6px;
-  background: #3182ce;
-  color: white;
-}
-
-
-
-
-
-/* ============================
-   USERS PAGE LAYOUT
-=============================== */
-
-/* Whole Section */
-.users-section {
-  margin-left: 30px;          /* ← Para hindi matakpan ng sidebar */
-  padding: 20px;
-  color: #171616;
-}
-
-/* Flex layout: left = list, right = detail panel */
-.users-container {
-  display: flex;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-/* LEFT SIDE LIST (Owners + Renters) */
-.users-list {
-  width: 300px;
-  background: #8ad6ec;
-  padding: 15px;
-  border-radius: 12px;
-  height: calc(100vh - 180px);
-  overflow-y: auto;
-  box-shadow: #fff;
-}
-
-.users-list h3 {
-  margin-bottom: 10px;
-  color: #131414;
-}
-
-.user-item {
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #e6e4e4;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.user-item:hover {
-  background: #444;
-}
-
-.user-item.active {
-  background: #00c2ff;
-  color: #0e0d0d;
-  font-weight: bold;
-}
-
-/* RIGHT SIDE PANEL */
-.user-details-panel {
-  flex: 1;
-  background: #94dadb;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.4);
-  animation: slideIn 0.25s ease-out;
-}
-
-/* Panel opening animation */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(25px);
+  .admin-dashboard .stat-card {
+    flex: 1 1 100%;
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.close-btn {
-  background: #ff4c4c;
-  border: none;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.close-btn:hover {
-  background: #ff2b2b;
-}
-
-/* Property Cards (for owners) */
-.property-card.small {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  background: #f8eeee;
-  margin-top: 10px;
-  border-radius: 10px;
-}
-
-.property-card.small img {
-  width: 70px;
-  height: 70px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-/* Renter Rentals List */
-.rental-item {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  background: #f5eaea;
-  margin-top: 10px;
-  border-radius: 10px;
-}
-
-.rental-item img {
-  width: 70px;
-  height: 70px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-/* Message Input */
-.message-input {
-  margin-top: 20px;
-  display: flex;
-  gap: 10px;
-}
-
-.message-input input {
-  flex: 1;
-  padding: 10px;
-  border-radius: 10px;
-  border: none;
-  background: #f6f0f0;
-  color: #fff;
-}
-
-.message-input button {
-  padding: 10px 18px;
-  background: #00c2ff;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: 0.2s;
-}
-
-.message-input button:hover {
-  background: #009bc2;
-}
-
-
-/* Scrollbar (for dark theme) */
-.users-list::-webkit-scrollbar {
-  width: 8px;
-}
-
-.users-list::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 8px;
-}
-
-
-
-/* ============================
-   ADMIN – MY RENTALS SECTION
-============================= */
-
-/* Whole section – ADD MARGIN LEFT */
-.admin-myrentals-section {
-  margin-left: 30px; /* <-- para hindi matakpan ng sidebar */
-  padding: 20px;
-  color: #0e0b0b;
-}
-
-.admin-myrentals-section h2 {
-  margin-bottom: 20px;
-  color: #100f0f;
-}
-
-/* RENTER GROUP WRAPPER */
-.admin-renter-group {
-  background: #9fd9e9;
-  padding: 15px;
-  border-radius: 10px;
-  margin-bottom: 25px;
-  box-shadow: 0 3px 10px rgba(175, 40, 40, 0.3);
-}
-
-/* 🟦 Total Rentals */
-.admin-renter-total {
-  font-size: 18px;
-  margin-bottom: 15px;
-  font-weight: bold;
-}
-
-/* Cards wrapper */
-.admin-renter-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 20px;
-}
-
-/* Rental card layout */
-.admin-rental-card {
-  background: #e4dcdc;
-  padding: 15px;
-  border-radius: 10px;
-  display: flex;
-  gap: 15px;
-  align-items: flex-start;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-  transition: 0.3s ease;
-}
-
-.admin-rental-card:hover {
-  transform: scale(1.02);
-}
-
-/* Rental image */
-.admin-rental-image {
-  width: 50px;
-  height: 50px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-/* Text details */
-.admin-rental-details {
-  flex: 1;
-}
-
-.admin-rental-name {
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 6px;
-}
-
-.admin-rental-price,
-.admin-rental-ordered,
-.admin-rental-status {
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-/* Status button */
-.admin-rental-status-btn {
-  background: #2a80f1;
-  color: white;
-  padding: 3px 10px;
-  margin-left: 6px;
-  border-radius: 6px;
-  cursor: pointer;
-  border: none;
-  transition: 0.2s ease;
-}
-
-.admin-rental-status-btn:hover {
-  background: #75d1db;
-}
-
-/* ============================
-      MODAL SECTION
-============================= */
-
-.admin-rental-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(243, 236, 236, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-}
-
-.admin-rental-modal-content {
-  background: #e6dede;
-  width: 450px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.4);
-  position: relative;
-}
-
-.admin-modal-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: #a00;
-  color: #fff;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-/* Modal title */
-.rental-modal-title {
-  font-size: 20px;
-  margin-bottom: 15px;
-  text-align: center;
-}
-
-/* Modal main image */
-.rental-modal-image {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 15px;
-}
-
-/* Modal text */
-.rental-modal-item {
-  margin-bottom: 10px;
-  font-size: 15px;
-}
-
-/* Payment proof */
-.rental-modal-proof-image {
-  width: 80px;
-  height: 80px;
-  margin-top: 10px;
-  border-radius: 8px;
-}
-
-/* Dropdown */
-.rental-modal-select {
-  width: 100%;
-  padding: 8px;
-  margin: 10px 0;
-  border-radius: 6px;
-  background: #85d2e1;
-  color: rgb(24, 23, 23);
-}
-
-/* Modal action buttons */
-.rental-modal-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 15px;
-}
-
-.rental-modal-update-btn,
-.rental-modal-remove-btn,
-.rental-modal-close-btn {
-  padding: 8px 14px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font-weight: bold;
-  color: white;
-}
-
-.rental-modal-update-btn { background: #1d7dff; }
-.rental-modal-remove-btn { background: #d9534f; }
-.rental-modal-close-btn { background: #555; }
-
-.rental-modal-update-btn:hover { background: #4699ff; }
-.rental-modal-remove-btn:hover { background: #e66865; }
-.rental-modal-close-btn:hover { background: #777; }
-
-
-
-/* ================================
-   TRANSACTIONS SECTION (WITHDRAWALS)
-   Compact + Sky Blue Theme
-================================ */
-
-.transactions-section {
-  margin-left: 30px;
-  padding: 50px;
-  color: black;                 /* text black */
-  font-family: Arial, sans-serif;
-}
-
-.transactions-section h2 {
-  margin-bottom: 15px;
-  color: black;
-}
-
-/* Withdrawal card */
-.withdrawal-card {
-  background: #97c3e4;          /* white background */
-  border: 1px solid #76c8d8;    /* soft skyblue border */
-  padding: 12px 15px;
-  margin-bottom: 15px;
-  border-radius: 10px;
-  max-width: 400px;             /* ❗ tamang lapad (not too wide) */
-  transition: 0.2s ease;
-}
-
-.withdrawal-card:hover {
-  background: #6c9ec8;          /* light skyblue on hover */
-}
-
-/* One-line details */
-.withdrawal-owner,
-.withdrawal-amount,
-.withdrawal-status {
-  font-size: 15px;
-  margin-bottom: 6px;
-  color: black;
-}
-
-/* Status clickable */
-.withdrawal-status-toggle {
-  cursor: pointer;
-  background: #87cefa;          /* sky blue */
-  color: black;
-  padding: 4px 10px;
-  border-radius: 6px;
-  margin-left: 5px;
-}
-
-/* Expanded details box */
-.withdrawal-expanded {
-  background: #f7ffff;          /* light sky blue */
-  padding: 10px;
-  margin-top: 10px;
-  border-radius: 8px;
-  border-left: 4px solid #87cefa;
-  max-width: 600px;             /* ❗ limit size */
-}
-
-.withdrawal-expanded div {
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: black;
-}
-
-/* Confirm input */
-.withdrawal-confirm-input {
-  width: 200px;
-  padding: 5px;
-  border-radius: 6px;
-  border: 1px solid #87cefa;
-  background: rgb(144, 234, 234);
-  color: black;
-}
-
-/* Action buttons section */
-.withdrawal-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* Approve button */
-.withdrawal-approve-btn {
-  background: #87cefa;          /* sky blue */
-  color: black;
-  border: 1px solid #7ec2f0;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: 0.2s ease;
-}
-
-.withdrawal-approve-btn:hover {
-  background: #aee0ff;
-}
-
-/* Reject button */
-.withdrawal-reject-btn {
-  background: #ff7f7f;          /* soft red */
-  color: black;
-  border: 1px solid #e86868;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.withdrawal-reject-btn:hover {
-  background: #ff9a9a;
-}
-
-/* ===================================================
-   ADMIN MESSAGES PAGE (SKY BLUE THEME)
-=================================================== */
-
-.admin-messages-page {
-  margin-left: 30px;
-  padding: 20px;
-  color: black;
-  font-family: Arial, sans-serif;
-}
-
-.admin-messages-page h1 {
-  margin-bottom: 20px;
-  color: black;
-}
-
-/* WRAPPER */
-.admin-messages-container {
-  display: flex;
-  gap: 20px;
-}
-
-/* ================================
-   LEFT: CONVERSATION LIST
-================================ */
-.conversation-list {
-  width: 250px;
-  background: #95d5e8;
-  border: 1px solid #cce7ff;
-  padding: 15px;
-  border-radius: 10px;
-  height: 500px;
-  overflow-y: auto;
-}
-
-.conversation-list h3 {
-  color: black !important;
-  margin-bottom: 10px;
-}
-
-.conversation-item {
-  padding: 10px;
-  margin-bottom: 8px;
-  background: #80d3bf;
-  border: 1px solid #4381b7;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.2s ease;
-  color: black !important;
-}
-
-.conversation-item:hover {
-  background: #71c0ad;
-}
-
-.conversation-item.active {
-  background: #87cefa;
-  border-color: #55b9f7;
-  color: black !important;
-  font-weight: bold;
-}
-
-/* ================================
-   RIGHT: CHAT WINDOW
-================================ */
-.chat-window {
-  flex: 1;
-  background: #5a9dd0;
-  border: 1px solid #cce7ff;
-  padding: 15px;
-  border-radius: 10px;
-  height: 500px;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Header */
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #dad7d7;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #0e0e0f;
-  margin-bottom: 10px;
-}
-
-.chat-header h3 {
-  color: black !important;
-  margin: 0;
-}
-
-.chat-header button {
-  background: #c01c1c;
-  padding: 5px 10px;
-  border: 1px solid #70b9e4;
-  border-radius: 6px;
-  cursor: pointer;
-  color: black;
-  transition: 0.2s ease;
-}
-
-.chat-header button:hover {
-  background: #aee0ff;
-}
-
-/* CHAT MESSAGES */
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 10px;
-}
-
-/* BUBBLES */
-.chat-bubble {
-  max-width: 70%;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border-radius: 10px;
-  font-size: 14px;
-  position: relative;
-  color: black !important;
-}
-
-/* Sent by Admin */
-.chat-bubble.sent {
-  background: #eaeef1;
-  margin-left: auto;
-  border: 1px solid #181818;
-}
-
-/* Received */
-.chat-bubble.received {
-  background: #efeaea;
-  border: 1px solid #101111;
-  color: black !important;
-}
-
-/* timestamp */
-.chat-bubble small {
-  display: block;
-  margin-top: 5px;
-  font-size: 11px;
-  opacity: 0.8;
-  color: black !important;
-}
-
-/* ================================
-   INPUT BAR
-================================ */
-.chat-input {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #63a1ca;
-  background: rgb(238, 235, 235);
-  color: black;
-}
-
-.chat-input button {
-  background: #87cefa;
-  padding: 10px 15px;
-  border-radius: 8px;
-  border: 1px solid #6db8e3;
-  cursor: pointer;
-  color: black;
-  font-weight: bold;
-  transition: 0.2s ease;
-}
-
-.chat-input button:hover {
-  background: #aee0ff;
-}
-
-
-/* ================================================
-   FORCE ALL TEXT (names, emails) TO BLACK
-================================================ */
-.conversation-item,
-.conversation-item.active,
-.conversation-list h3,
-.chat-header h3,
-.chat-bubble,
-.chat-bubble small {
-  color: #000 !important;
 }

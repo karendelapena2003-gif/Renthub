@@ -522,15 +522,42 @@ const rejectWithdrawal = async (withdrawal) => {
   }
 };
 
+// ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
+useEffect(() => {
+  if (window.innerWidth <= 768) {
+    setSidebarOpen(false);
+  }
+}, [activePage]);
+
 
   /* ---------------- render ---------------- */
   return (
-    <div className="dashboard-content admin-dashboard">
-  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+  <div className="dashboard-container admin-dashboard">
+  {/* MENU TOGGLE BUTTON */}
+  <button
+    className="menu-toggle"
+    onClick={() => setSidebarOpen(!sidebarOpen)}
+  >
     ☰
   </button>
-  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
-      <Sidebar userType="admin" activePage={activePage} setActivePage={setActivePage} onLogout={onLogout} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
+
+  {/* SIDEBAR OVERLAY */}
+  {sidebarOpen && (
+    <div
+      className="sidebar-overlay"
+      onClick={() => setSidebarOpen(false)}
+    />
+  )}
+
+  {/* SIDEBAR */}
+  <Sidebar
+    userType="admin"
+    activePage={activePage}
+    setActivePage={setActivePage}
+    onLogout={onLogout}
+    isOpen={sidebarOpen}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
 
       <div className="main-dashboard">
         {/* Admin Profile */}

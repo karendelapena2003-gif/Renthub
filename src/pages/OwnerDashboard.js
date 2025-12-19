@@ -430,20 +430,41 @@ const handleDeleteConversation = async (chatUserEmail) => {
   await Promise.all(batch);
   setSelectedChat(null);
 };
+
+// ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
+useEffect(() => {
+  if (window.innerWidth <= 768) {
+    setSidebarOpen(false);
+  }
+}, [activePage]);
+
   // ---------- JSX ----------
   return (
-    <div className="dashboard-container owner-dashboard">
-  <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+   <div className="dashboard-container owner-dashboard">
+  {/* MENU TOGGLE BUTTON */}
+  <button
+    className="menu-toggle"
+    onClick={() => setSidebarOpen(!sidebarOpen)}
+  >
     ☰
   </button>
-  {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+
+  {/* SIDEBAR OVERLAY */}
+  {sidebarOpen && (
+    <div
+      className="sidebar-overlay"
+      onClick={() => setSidebarOpen(false)}
+    />
+  )}
+
+  {/* SIDEBAR */}
   <Sidebar
     userType="owner"
     activePage={activePage}
     setActivePage={setActivePage}
     onLogout={onLogout}
     isOpen={sidebarOpen}
-    onToggle={() => setSidebarOpen(false)}
+    closeSidebar={() => setSidebarOpen(false)}
   />
 
   <div className="dashboard-content" onClick={() => setSidebarOpen(false)}>
