@@ -1,0 +1,122 @@
+[debug] [2025-12-20T11:04:36.700Z] ----------------------------------------------------------------------
+[debug] [2025-12-20T11:04:36.704Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\asus\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2025-12-20T11:04:36.704Z] CLI Version:   15.0.0
+[debug] [2025-12-20T11:04:36.705Z] Platform:      win32
+[debug] [2025-12-20T11:04:36.705Z] Node Version:  v22.19.0
+[debug] [2025-12-20T11:04:36.705Z] Time:          Sat Dec 20 2025 19:04:36 GMT+0800 (China Standard Time)
+[debug] [2025-12-20T11:04:36.705Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-20T11:04:39.940Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-20T11:04:39.941Z] > authorizing via signed-in user (karendelapena2003@gmail.com)
+[debug] [2025-12-20T11:04:39.941Z] [iam] checking project renthub-system for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2025-12-20T11:04:39.943Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:39.943Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:39.944Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/renthub-system:testIamPermissions [none]
+[debug] [2025-12-20T11:04:39.944Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/renthub-system:testIamPermissions x-goog-quota-user=projects/renthub-system
+[debug] [2025-12-20T11:04:39.945Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/renthub-system:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2025-12-20T11:04:41.491Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/renthub-system:testIamPermissions 200
+[debug] [2025-12-20T11:04:41.492Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/renthub-system:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2025-12-20T11:04:41.493Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:41.493Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:41.493Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/renthub-system [none]
+[debug] [2025-12-20T11:04:43.391Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/renthub-system 200
+[debug] [2025-12-20T11:04:43.391Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/renthub-system {"projectId":"renthub-system","projectNumber":"938918233576","displayName":"Renthub-system","name":"projects/renthub-system","resources":{"hostingSite":"renthub-system","realtimeDatabaseInstance":"renthub-system-default-rtdb"},"state":"ACTIVE","etag":"1_add327b6-3897-4f0e-b4c8-d3ab528ce961"}
+[info] 
+[info] === Deploying to 'renthub-system'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2025-12-20T11:04:43.403Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:43.403Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:43.403Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions [none]
+[debug] [2025-12-20T11:04:43.403Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2025-12-20T11:04:45.858Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions 200
+[debug] [2025-12-20T11:04:45.858Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions {"name":"projects/938918233576/sites/renthub-system/versions/3585d31133e079eb","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[renthub-system]: beginning deploy... 
+[info] i  hosting[renthub-system]: found 16 files in build 
+[debug] [2025-12-20T11:04:45.886Z] [hosting] uploading with 200 concurrency
+[debug] [2025-12-20T11:04:46.585Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:46.586Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:46.588Z] [hosting] hash cache [YnVpbGQ] stored for 16 files
+[debug] [2025-12-20T11:04:46.588Z] [hosting][hash queue][FINAL] {"max":689,"min":7,"avg":69,"active":0,"complete":16,"success":16,"errored":0,"retried":0,"total":16,"elapsed":697}
+[debug] [2025-12-20T11:04:46.589Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/938918233576/sites/renthub-system/versions/3585d31133e079eb:populateFiles [none]
+[debug] [2025-12-20T11:04:46.589Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/938918233576/sites/renthub-system/versions/3585d31133e079eb:populateFiles {"files":{"/robots.txt":"b2090cf9761ef60aa06e4fab97679bd43dfa5e5df073701ead5879d7c68f1ec5","/manifest.json":"4368aeaf848ae2e048765562c289452f33ad2a175c4b1951ea8bdf2ada0d5b10","/logo512.png":"212b102aa09e51b3b3e06647e81f7801a61333e171f6582e8124379aabccb41d","/logo192.png":"79e2b749561016bc8af300ea19f48347ceed3cb1a54f48ae456172eca45e08f0","/favicon.ico":"27edce7be5922cf0bef7d4136f69b5bfbdd5bf8c13c7b026f71187d41a00aa7d","/index.html":"eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7","/asset-manifest.json":"466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe","/static/js/main.b359b2a4.js.LICENSE.txt":"2f93e8dc2a49e84e0f7f4df77f7eba0589cd900147b436eddf1231a9262eb99c","/static/js/488.c2ff722e.chunk.js":"4a764a94f7026e40a14de2d7a71b69fc0f090c77e43e52596170aa4570cbfdcd","/static/js/488.c2ff722e.chunk.js.map":"ca39afd7ee142bac9764acfabc37d3582f570e66a3a18de1bcca40c4639dcc24","/static/css/main.d8a5befb.css":"6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf","/static/css/main.d8a5befb.css.map":"7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277","/static/media/bondok.1672b97c34887df67772.png":"2852a6029311770a02f7f4470c4b3f0e68487cee6795a6dc5e0e08c44fb7d11f","/static/js/main.b359b2a4.js":"9a477c59c0006172b4c243de867bd709b330145b035f4bed78094e3b279baa76","/static/media/house.png.7a2846fecfddf52f5cee.png":"f479e35304a6d18d02d855b5ec2e5e536da3804da6306da40671fe6deb171fff","/static/js/main.b359b2a4.js.map":"92091a4021c7dd6477e29aa85a66122087eb5ad8bdd179f662bc721daa5749f0"}}
+[debug] [2025-12-20T11:04:47.574Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/938918233576/sites/renthub-system/versions/3585d31133e079eb:populateFiles 200
+[debug] [2025-12-20T11:04:47.575Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/938918233576/sites/renthub-system/versions/3585d31133e079eb:populateFiles {"uploadRequiredHashes":["7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277","6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf","466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe","eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files"}
+[debug] [2025-12-20T11:04:47.575Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.575Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.575Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.575Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.576Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.576Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.576Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.576Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:47.576Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277 [none]
+[debug] [2025-12-20T11:04:47.576Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277 [stream]
+[debug] [2025-12-20T11:04:47.578Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf [none]
+[debug] [2025-12-20T11:04:47.578Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf [stream]
+[debug] [2025-12-20T11:04:47.580Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe [none]
+[debug] [2025-12-20T11:04:47.580Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe [stream]
+[debug] [2025-12-20T11:04:47.581Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7 [none]
+[debug] [2025-12-20T11:04:47.581Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7 [stream]
+[debug] [2025-12-20T11:04:47.583Z] [hosting][populate queue][FINAL] {"max":991,"min":991,"avg":991,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":998}
+[debug] [2025-12-20T11:04:47.583Z] [hosting] uploads queued: 4
+[debug] [2025-12-20T11:04:50.013Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277 200
+[debug] [2025-12-20T11:04:50.013Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/7bbffdc8c0220f2ef1fe4e80467910185ee09049a3d83147f71e06aedb999277 [stream]
+[debug] [2025-12-20T11:04:50.450Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe 200
+[debug] [2025-12-20T11:04:50.451Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/466b9aabc8db9d43378e517da758bc750046d9d390301f01e817213084d272fe [stream]
+[debug] [2025-12-20T11:04:50.980Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7 200
+[debug] [2025-12-20T11:04:50.980Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/eeffed6f78aada889b9b64b2b58c868250ae680d65cb6d7f16b76452b12d45d7 [stream]
+[debug] [2025-12-20T11:04:53.210Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf 200
+[debug] [2025-12-20T11:04:53.211Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/renthub-system/versions/3585d31133e079eb/files/6713193077447467763036b23bc56dc71ab78c5895406066e885485a81109abf [stream]
+[debug] [2025-12-20T11:04:53.211Z] [hosting][upload queue][FINAL] {"max":5636,"min":2438,"avg":3588.5,"active":0,"complete":4,"success":4,"errored":0,"retried":0,"total":4,"elapsed":5636}
+[info] +  hosting[renthub-system]: file upload complete 
+[debug] [2025-12-20T11:04:53.213Z] [hosting] deploy completed after 7350ms
+[debug] [2025-12-20T11:04:53.213Z] [
+  {
+    "config": {
+      "public": "build",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "site": "renthub-system"
+    },
+    "version": "projects/938918233576/sites/renthub-system/versions/3585d31133e079eb"
+  }
+]
+[info] i  hosting[renthub-system]: finalizing version... 
+[debug] [2025-12-20T11:04:53.216Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:53.216Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:53.216Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions/3585d31133e079eb updateMask=status%2Cconfig
+[debug] [2025-12-20T11:04:53.216Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions/3585d31133e079eb {"status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]}}
+[debug] [2025-12-20T11:04:54.954Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions/3585d31133e079eb 200
+[debug] [2025-12-20T11:04:54.954Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/versions/3585d31133e079eb {"name":"projects/938918233576/sites/renthub-system/versions/3585d31133e079eb","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2025-12-20T11:04:20.914914Z","createUser":{"email":"karendelapena2003@gmail.com"},"finalizeTime":"2025-12-20T11:04:30.199751Z","finalizeUser":{"email":"karendelapena2003@gmail.com"}}
+[debug] [2025-12-20T11:04:54.955Z] [hosting] finalized version for renthub-system:[object Object]
+[info] +  hosting[renthub-system]: version finalized 
+[info] i  hosting[renthub-system]: releasing new version... 
+[debug] [2025-12-20T11:04:54.956Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:54.956Z] Checked if tokens are valid: true, expires at: 1766230244891
+[debug] [2025-12-20T11:04:54.956Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/channels/live/releases versionName=projects%2F938918233576%2Fsites%2Frenthub-system%2Fversions%2F3585d31133e079eb
+[debug] [2025-12-20T11:04:54.957Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/channels/live/releases {}
+[debug] [2025-12-20T11:04:56.046Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/channels/live/releases 200
+[debug] [2025-12-20T11:04:56.046Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/renthub-system/channels/live/releases {"name":"projects/938918233576/sites/renthub-system/channels/live/releases/1766228670847000","version":{"name":"projects/938918233576/sites/renthub-system/versions/3585d31133e079eb","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2025-12-20T11:04:20.914914Z","createUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"},"finalizeTime":"2025-12-20T11:04:30.199751Z","finalizeUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"}},"type":"DEPLOY","releaseTime":"2025-12-20T11:04:30.847Z","releaseUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"}}
+[debug] [2025-12-20T11:04:56.046Z] [hosting] release: {"name":"projects/938918233576/sites/renthub-system/channels/live/releases/1766228670847000","version":{"name":"projects/938918233576/sites/renthub-system/versions/3585d31133e079eb","status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2025-12-20T11:04:20.914914Z","createUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"},"finalizeTime":"2025-12-20T11:04:30.199751Z","finalizeUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"}},"type":"DEPLOY","releaseTime":"2025-12-20T11:04:30.847Z","releaseUser":{"email":"karendelapena2003@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKAk7M48S97wqaydmkabcUVeAjMMGiDAwyPLCmTzslXQiVofYc"}}
+[info] +  hosting[renthub-system]: release complete 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/renthub-system/overview
+[info] Hosting URL: https://renthub-system.web.app
+[debug] [2025-12-20T11:05:01.548Z] Error: Timed out.
+    at Timeout._onTimeout (C:\Users\asus\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:275:49)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+[error] 
+[error] Error: An unexpected error has occurred.

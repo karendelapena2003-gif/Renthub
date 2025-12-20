@@ -1,471 +1,488 @@
-/* ====== COLORS (Admin Only) ====== */
-.admin-dashboard {
-  --primary-color: #4CAF50;
-  --secondary-color: #f4f4f4;
-  --text-color: #333;
-  --sidebar-bg: #2c3e50;
-  --sidebar-text: #fff;
-  --button-bg: #4CAF50;
-  --button-text: #fff;
-  --overlay-bg: rgba(0,0,0,0.45);
+/* ===============================
+   GLOBAL RESET
+================================ */
+* {
+  box-sizing: border-box;
 }
 
-/* ====== MAIN LAYOUT ====== */
-.admin-dashboard .dashboard-container {
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f2f8ff;
+}
+
+/* ===============================
+   DASHBOARD LAYOUT
+================================ */
+.dashboard-container {
   display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ===============================
+   SIDEBAR
+================================ */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
   height: 100vh;
-  overflow: hidden;
-  background-color: var(--secondary-color);
-}
-
-/* ===== MENU TOGGLE BUTTON ===== */
-.admin-dashboard .menu-toggle {
-  display: none;
-  position: fixed;
-  top: 15px;
-  left: 15px;
-  z-index: 1100;
-  font-size: 24px;
-  background-color: var(--primary-color);
-  color: var(--button-text);
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-/* ===== SIDEBAR ===== */
-.admin-dashboard .sidebar {
-  width: 240px;
-  background-color: var(--sidebar-bg);
-  color: var(--sidebar-text);
+  background: linear-gradient(180deg, #64b5f6, #1e88e5);
   position: fixed;
   top: 0;
   left: 0;
-  height: 100%;
-  z-index: 1100;
-  overflow-y: auto;
-  transition: left 0.3s ease;
-  padding-top: 20px;
-}
-
-.admin-dashboard .sidebar a {
-  display: block;
-  padding: 10px 20px;
-  text-decoration: none;
-  color: var(--sidebar-text);
-}
-
-.admin-dashboard .sidebar a.active {
-  background-color: var(--primary-color);
-}
-
-.admin-dashboard .sidebar.open {
-  left: 0;
-}
-
-/* ===== SIDEBAR OVERLAY ===== */
-.admin-dashboard .sidebar-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: var(--overlay-bg);
   z-index: 1000;
-}
-
-/* ===== DASHBOARD CONTENT ===== */
-.admin-dashboard .dashboard-content {
-  flex: 1;
-  margin-left: 240px;
-  padding: 20px;
+  color: #fff;
   overflow-y: auto;
-  transition: margin-left 0.3s ease;
-  background-color: var(--secondary-color);
 }
 
-/* MOBILE RESPONSIVE */
-@media (max-width: 1024px) {
-  .admin-dashboard .sidebar {
-    left: -240px;
-  }
-
-  .admin-dashboard .sidebar.open {
-    left: 0;
-  }
-
-  .admin-dashboard .menu-toggle {
-    display: block;
-  }
-
-  .admin-dashboard .sidebar.open ~ .sidebar-overlay {
-    display: block;
-  }
-
-  .admin-dashboard .dashboard-content {
-    margin-left: 0;
-  }
+/* ===============================
+   MAIN CONTENT
+================================ */
+.main-dashboard {
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  padding: 24px;
+  transition: all 0.3s ease;
 }
 
-/* ====== PROFILE, OVERVIEW, SECTIONS ====== */
-.admin-dashboard .profile-section,
-.admin-dashboard .overview-section,
-.admin-dashboard .properties-section,
-.admin-dashboard .users-section,
-.admin-dashboard .admin-myrentals-section,
-.admin-dashboard .transactions-section,
-.admin-dashboard .admin-messages-page {
+/* ===============================
+   SECTIONS
+================================ */
+section {
+  background: #ffffff;
+  border-radius: 16px;
   padding: 20px;
-  background: #fff;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
 }
 
-.admin-dashboard .profile-container {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+h2 {
+  margin-top: 0;
+  color: #1565c0;
 }
 
-.admin-dashboard .profile-preview {
+/* ===============================
+   DASHBOARD OVERVIEW
+================================ */
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #e3f2fd, #ffffff);
+  border-radius: 18px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+}
+
+/* ===============================
+   PROFILE
+================================ */
+.profile-container {
+  max-width: 720px;
+  margin: auto;
+}
+
+.profile-preview {
   display: flex;
   align-items: center;
-  gap: 15px;
-}
-
-.admin-dashboard .profile-img {
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.admin-dashboard .profile-info p {
-  margin: 4px 0;
-}
-
-.admin-dashboard .profile-form label {
-  display: block;
-  margin-top: 8px;
-}
-
-.admin-dashboard .profile-form input {
-  width: 100%;
-  padding: 6px 10px;
-  margin-top: 4px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-
-/* ====== STAT CARDS ====== */
-.admin-dashboard .overview-stats {
-  display: flex;
+  gap: 20px;
   flex-wrap: wrap;
-  gap: 20px;
-  margin-top: 15px;
 }
 
-.admin-dashboard .stat-card {
-  flex: 1 1 200px;
-  padding: 15px;
-  background: #e0f2fe;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: transform 0.2s, background 0.2s;
+.profile-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #90caf9;
 }
 
-.admin-dashboard .stat-card:hover {
-  transform: scale(1.03);
-  background: #bae6fd;
-}
-
-/* ====== PROPERTIES / USERS ====== */
-.admin-dashboard .properties-list,
-.admin-dashboard .users-list,
-.admin-dashboard .admin-renter-items {
+/* ===============================
+   PROPERTIES
+================================ */
+.properties-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
 }
 
-.admin-dashboard .property-card {
-  background: #f1f5f9;
-  border-radius: 12px;
+.property-card {
+  background: #f8fbff;
+  border-radius: 16px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
 }
 
-.admin-dashboard .property-card.small {
-  grid-template-columns: 1fr;
-}
-
-.admin-dashboard .property-image-wrapper img,
-.admin-dashboard .property-card img {
+.property-image {
   width: 100%;
-  height: 150px;
+  height: 160px;
   object-fit: cover;
-  border-radius: 8px;
 }
 
-.admin-dashboard .status-badges button {
-  margin-right: 5px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
+.property-main {
+  padding: 14px;
 }
 
-.admin-dashboard .remove-btn {
-  margin-top: 8px;
-  background: #f87171;
-  color: white;
-  border-radius: 6px;
-  padding: 6px 12px;
+/* ===============================
+   USERS SECTION
+================================ */
+.users-section {
+  position: relative;
 }
 
-/* ====== USERS LIST ====== */
-.admin-dashboard .users-container {
-  display: flex;
-  gap: 20px;
-}
-
-.admin-dashboard .users-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.admin-dashboard .user-item {
-  padding: 8px 12px;
-  margin-bottom: 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  background: #bae6fd;
-  transition: background 0.2s;
-}
-
-.admin-dashboard .user-item.active {
-  background: #0ea5e9;
-  color: white;
-}
-
-.admin-dashboard .user-details-panel {
-  flex: 2;
-  background: #f1f5f9;
-  padding: 15px;
-  border-radius: 12px;
-  overflow-y: auto;
-}
-
-.admin-dashboard .close-btn {
-  background: #f87171;
-  color: white;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-/* ====== RENTALS ====== */
-.admin-dashboard .admin-renter-group {
-  margin-bottom: 20px;
-}
-
-.admin-dashboard .admin-renter-items {
+/* ===============================
+   USERS CONTAINER (DESKTOP)
+================================ */
+.users-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: 320px 1fr;
   gap: 20px;
+  align-items: flex-start;
 }
 
-.admin-dashboard .admin-rental-card {
-  display: flex;
-  background: #e0f2fe;
-  border-radius: 12px;
-  overflow: hidden;
-  gap: 10px;
-  padding: 10px;
-}
-
-.admin-dashboard .admin-rental-image {
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
-.admin-dashboard .admin-rental-details {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.admin-dashboard .admin-rental-status-btn {
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  background: #0ea5e9;
-  color: white;
-}
-
-/* ====== CHAT / MESSAGES ====== */
-.admin-dashboard .admin-messages-container {
-  display: flex;
-  gap: 15px;
-}
-
-.admin-dashboard .conversation-list {
-  flex: 0 0 250px;
-  background: #e0f2fe;
-  padding: 10px;
-  border-radius: 12px;
+/* ===============================
+   USERS LIST
+================================ */
+.users-list {
+  background: linear-gradient(180deg, #e3f2fd, #ffffff);
+  border-radius: 16px;
+  padding: 14px;
+  max-height: 75vh;
   overflow-y: auto;
 }
 
-.admin-dashboard .conversation-item {
-  padding: 8px 12px;
-  margin-bottom: 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  background: #bae6fd;
-  transition: background 0.2s;
+.users-list h3 {
+  margin: 12px 0 10px;
+  color: #1565c0;
 }
 
-.admin-dashboard .conversation-item.active {
-  background: #0ea5e9;
-  color: white;
-}
-
-.admin-dashboard .chat-window {
-  flex: 1;
+/* ===============================
+   USER ITEM (EMAIL)
+================================ */
+.user-item {
   background: #ffffff;
+  margin-bottom: 10px;
+  padding: 12px;
   border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s ease;
 }
 
-.admin-dashboard .chat-header {
-  padding: 10px 15px;
-  background: #0ea5e9;
-  color: white;
+.user-item:hover {
+  background: #e3f2fd;
+}
+
+.user-item.active {
+  background: #bbdefb;
+  font-weight: 600;
+}
+
+/* ===============================
+   USER DETAILS PANEL (DESKTOP)
+================================ */
+.user-details-panel {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+/* ===============================
+   PANEL HEADER
+================================ */
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 14px;
 }
 
-.admin-dashboard .chat-messages {
-  flex: 1;
-  padding: 15px;
-  background: #f1f5f9;
-  overflow-y: auto;
+.panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1565c0;
+}
+
+/* CLOSE BUTTON */
+.close-btn {
+  background: #e3f2fd;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* ===============================
+   USER IMAGE
+================================ */
+.user-details-panel img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #90caf9;
+  margin-bottom: 10px;
+}
+
+/* ===============================
+   PROPERTY CARD (SMALL)
+================================ */
+.property-card.small {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.admin-dashboard .chat-bubble {
-  max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 12px;
-  word-wrap: break-word;
-}
-
-.admin-dashboard .chat-bubble.sent {
-  background: #0ea5e9;
-  color: white;
-  align-self: flex-end;
-  border-bottom-right-radius: 0;
-}
-
-.admin-dashboard .chat-bubble.received {
-  background: #e2e8f0;
-  color: #111;
-  align-self: flex-start;
-  border-bottom-left-radius: 0;
-}
-
-.admin-dashboard .chat-input {
-  display: flex;
-  gap: 8px;
+  gap: 12px;
+  background: #f5faff;
   padding: 10px;
-  background: #f8fafc;
-  border-top: 1px solid #cbd5e1;
+  border-radius: 12px;
+  margin-bottom: 10px;
 }
 
-.admin-dashboard .chat-input input {
+.property-card.small img {
+  width: 70px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* ===============================
+   MESSAGE INPUT
+================================ */
+.message-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.message-input input {
   flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #bbdefb;
 }
 
-.admin-dashboard .chat-input button {
-  background: #0ea5e9;
-  color: white;
-  padding: 8px 14px;
-  border-radius: 8px;
+.message-input button {
+  background: #1e88e5;
+  color: #ffffff;
   border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
   cursor: pointer;
 }
 
-/* ====== BUTTONS ====== */
-.admin-dashboard button {
-  background-color: var(--button-bg);
-  color: var(--button-text);
-  border: none;
-  padding: 6px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-}
+/* ===============================
+   MOBILE (SHOPEE STYLE)
+================================ */
+@media (max-width: 768px) {
 
-.admin-dashboard button:hover {
-  opacity: 0.9;
-}
-
-/* ====== RESPONSIVE ====== */
-@media (max-width: 900px) {
-  .admin-dashboard .admin-messages-container {
-    flex-direction: column;
-  }
-
-  .admin-dashboard .conversation-list {
-    flex-direction: row;
-    width: 100%;
-    overflow-x: auto;
-    height: 120px;
-  }
-
-  .admin-dashboard .conversation-item {
-    min-width: 120px;
-    white-space: normal;
-  }
-
-  .admin-dashboard .admin-renter-items {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  }
-}
-
-@media (max-width: 500px) {
-  .admin-dashboard .chat-window {
-    height: 350px;
-  }
-
-  .admin-dashboard .chat-input input,
-  .admin-dashboard .chat-input button {
-    font-size: 12px;
-    padding: 6px 10px;
-  }
-
-  .admin-dashboard .admin-renter-items {
+  .users-container {
     grid-template-columns: 1fr;
   }
 
-  .admin-dashboard .stat-card {
-    flex: 1 1 100%;
+  /* hide list when panel is open */
+  .users-container:has(.user-details-panel) .users-list {
+    display: none;
+  }
+
+  .user-details-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    border-radius: 0;
+    padding: 18px;
+    animation: slideUp 0.25s ease;
+  }
+
+  .panel-header {
+    position: sticky;
+    top: 0;
+    background: #ffffff;
+    padding-bottom: 10px;
+    z-index: 10;
+  }
+}
+
+/* ===============================
+   ANIMATION
+================================ */
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ===============================
+   MY RENTALS (LIST)
+================================ */
+.admin-renter-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.admin-rental-card {
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+}
+
+.admin-rental-image {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+
+.admin-rental-body {
+  padding: 14px;
+}
+
+/* ===============================
+   TO PAY VIEW (DETAIL)
+================================ */
+.to-pay-view {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 24px;
+  max-width: 600px;
+  margin: auto;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.15);
+  animation: fadeIn 0.25s ease;
+}
+
+.to-pay-image {
+  width: 100%;
+  height: 150px; /* SAME SIZE AS CARD */
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+.to-pay-view h3 {
+  margin-top: 0;
+  color: #1565c0;
+}
+
+.close-to-pay {
+  background: none;
+  border: none;
+  color: #1e88e5;
+  font-size: 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+/* BUTTON */
+.to-pay-btn {
+  background: #1e88e5;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.to-pay-btn:hover {
+  background: #1565c0;
+}
+
+/* ===============================
+   ANIMATION
+================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===============================
+   TRANSACTIONS
+================================ */
+.withdrawal-card {
+  background: linear-gradient(135deg, #e3f2fd, #ffffff);
+  padding: 16px;
+  border-radius: 16px;
+}
+
+/* ===============================
+   MESSAGES
+================================ */
+.admin-messages-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+}
+
+.conversation-list {
+  background: linear-gradient(180deg, #e3f2fd, #ffffff);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.chat-window {
+  background: #ffffff;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===============================
+   MOBILE
+================================ */
+.menu-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-dashboard {
+    margin-left: 0;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .menu-toggle {
+    display: block;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    background: #1e88e5;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+  }
+
+  .users-container,
+  .admin-messages-container {
+    grid-template-columns: 1fr;
+  }
+
+  .to-pay-image {
+    height: 140px;
   }
 }
