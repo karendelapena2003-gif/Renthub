@@ -88,14 +88,14 @@ h2 {
    PROFILE
 ================================ */
 .profile-container {
-  max-width: 720px;
+  max-width: 500px;
   margin: auto;
 }
 
 .profile-preview {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -327,6 +327,45 @@ h2 {
     opacity: 1;
   }
 }
+/* ===============================
+   MOBILE HEADER FIX (USERS PAGE)
+   SAME AS ADMIN PROFILE
+================================ */
+@media (max-width: 768px) {
+
+  /* wrapper ng title + hamburger */
+  .page-header {
+    display: flex;
+    align-items: center;          /* 🔥 pantay */
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  /* USERS TITLE */
+  .page-header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1565c0;
+  }
+
+  /* HAMBURGER BUTTON */
+  .menu-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #1e88e5;
+    color: #ffffff;
+    border: none;
+    font-size: 20px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+}
+
 
 /* ===============================
    MY RENTALS (LIST)
