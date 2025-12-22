@@ -1,5 +1,6 @@
 // ✅ src/pages/OwnerDashboard.js
 import React, { useState, useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "./Sidebar";
 import "./OwnerDashboard.css";
 import { db, auth } from "../firebase";
@@ -16,11 +17,11 @@ import {
   setDoc,
   getDocs,
    orderBy,
-   getDoc
+   getDoc,
 } from "firebase/firestore";
 import { CLOUD_NAME, UPLOAD_PRESET } from "../cloudinaryConfig";
 import { useNavigate } from "react-router-dom";
-import { updateProfile, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import {   getAuth, updateProfile, EmailAuthProvider, reauthenticateWithCredential,  updatePassword } from "firebase/auth";
 
 const OwnerDashboard = ({ onLogout }) => {
   const [user, setUser] = useState(auth.currentUser);
@@ -39,6 +40,13 @@ const OwnerDashboard = ({ onLogout }) => {
   const currentUser = auth.currentUser;
   const ownerId = currentUser?.uid;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+   const [showSettings, setShowSettings] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  
   // ---------- Firestore listeners ----------
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -101,23 +109,9 @@ useEffect(() => {
 }, [ownerId]);
 
 
-const totalWithdrawn = withdrawals
-  .filter(w => w.status !== "rejected")
-  .reduce((sum, w) => sum + w.amount, 0);
-  const balance = earnings;
-  const withdrawn = totalWithdrawn;
-  const [withdrawMethod, setWithdrawMethod] = useState("");
-  const [withdrawAccountName, setWithdrawAccountName] = useState("");
-  const [withdrawPhone, setWithdrawPhone] = useState("");
-  const [withdrawPassword, setWithdrawPassword] = useState("");
-  
-
-// Function to toggle the visibility of the withdrawals list
-  const toggleWithdrawals = () => {
-    setShowWithdrawals((prev) => !prev); // Toggle the state between true and false
-  };
 
   // ---------- Profile handlers ----------
+
   const handleSaveProfile = async () => {
     if (!auth.currentUser) return alert("User not logged in.");
     if (!displayName || displayName.trim() === "") return alert("Display name cannot be empty.");
@@ -170,7 +164,6 @@ const totalWithdrawn = withdrawals
       setLoading(false);
     }
   };
-
   const handleCancel = () => {
     setDisplayName(user?.displayName || "");
     setPhoto(null);
@@ -178,7 +171,46 @@ const totalWithdrawn = withdrawals
     setIsEditing(false);
   };
 
+    const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert("New password and confirm password do not match");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      const auth = getAuth();
+      const user = auth.currentUser;
+
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
+      );
+
+      await reauthenticateWithCredential(user, credential);
+
+      await updatePassword(user, newPassword);
+
+      alert("Password updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowSettings(false);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+
   // ---------- Add Post ----------
+
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -230,8 +262,25 @@ const totalWithdrawn = withdrawals
     try { await updateDoc(doc(db, "properties", id), { paymentStatus: "Paid" }); alert("Marked as Paid."); }
     catch (err) { console.error(err); alert("Failed."); }
   };
+
+
+   // ---------- Handle Withdraw ----------
+
+const totalWithdrawn = withdrawals
+  .filter(w => w.status !== "rejected")
+  .reduce((sum, w) => sum + w.amount, 0);
+  const balance = earnings;
+  const withdrawn = totalWithdrawn;
+  const [withdrawMethod, setWithdrawMethod] = useState("");
+  const [withdrawAccountName, setWithdrawAccountName] = useState("");
+  const [withdrawPhone, setWithdrawPhone] = useState("");
+  const [withdrawPassword, setWithdrawPassword] = useState("");
+  
+  const toggleWithdrawals = () => {
+    setShowWithdrawals((prev) => !prev); 
+  };
+
 const handleWithdraw = async () => {
-  // Validate required fields
   if (!withdrawMethod || !withdrawAccountName || !withdrawPhone) {
     return alert("Please fill in all withdrawal details!");
   }
@@ -241,10 +290,9 @@ const handleWithdraw = async () => {
   const amountToWithdraw = Number(balance);
 
   try {
-    // Save withdrawal record with ownerEmail
     await addDoc(collection(db, "withdrawals"), {
       ownerId: auth.currentUser.uid,
-      ownerEmail: auth.currentUser.email, // Make sure this matches your UI field
+      ownerEmail: auth.currentUser.email, 
       amount: amountToWithdraw,
       method: withdrawMethod,
       accountName: withdrawAccountName,
@@ -253,7 +301,6 @@ const handleWithdraw = async () => {
       createdAt: serverTimestamp(),
     });
 
-    // Reset owner's balance
     await updateDoc(doc(db, "owners", auth.currentUser.uid), {
       earnings: 0,
     });
@@ -270,14 +317,60 @@ const handleWithdraw = async () => {
   }
 };
 
+const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+const [showWithdrawals, setShowWithdrawals] = useState(false); // State for toggling visibility
+
+
+async function updateOldWithdrawalsWithEmails() {
+  try {
+    const withdrawalsCol = collection(db, "withdrawals");
+    const withdrawalsSnap = await getDocs(withdrawalsCol);
+
+    for (const wDoc of withdrawalsSnap.docs) {
+      const wData = wDoc.data();
+
+      if (!wData.ownerEmail && wData.ownerId) {
+        const ownerRef = doc(db, "owners", wData.ownerId);
+        const ownerSnap = await getDoc(ownerRef);
+
+        if (ownerSnap.exists()) {
+          const ownerEmail = ownerSnap.data().email;
+
+          await updateDoc(doc(db, "withdrawals", wDoc.id), {
+            ownerEmail: ownerEmail || "N/A",
+          });
+
+          console.log(`✅ Updated withdrawal ${wDoc.id} with email: ${ownerEmail}`);
+        } else {
+          console.log(`⚠️ Owner not found for withdrawal ${wDoc.id}`);
+        }
+      }
+    }
+
+    console.log("✅ All old withdrawals processed.");
+  } catch (err) {
+    console.error("❌ Error updating withdrawals:", err);
+  }
+}
+
+updateOldWithdrawalsWithEmails();
+
+
+  // ---------- MESSAGES HANDLERS ----------
+
+const [allUsers, setAllUsers] = useState([]);       
+const [selectedChat, setSelectedChat] = useState(null); 
+const [messages, setMessages] = useState([]);      
+const [replyText, setReplyText] = useState({});    
+
+const currentUserEmail = auth.currentUser?.email;
 
 useEffect(() => {
   if (!ownerEmail) return;
 
-  // Listen to all messages involving this owner
   const q = query(
     collection(db, "messages"),
-    orderBy("createdAt", "asc") // Firestore will still send nulls; we handle later
+    orderBy("createdAt", "asc") 
   );
 
   const unsub = onSnapshot(q, (snapshot) => {
@@ -303,54 +396,6 @@ const getFilteredMessages = (chatUser) => {
     )
     .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
 };
-
-const [showWithdrawForm, setShowWithdrawForm] = useState(false);
-const [showWithdrawals, setShowWithdrawals] = useState(false); // State for toggling visibility
-
-
-async function updateOldWithdrawalsWithEmails() {
-  try {
-    const withdrawalsCol = collection(db, "withdrawals");
-    const withdrawalsSnap = await getDocs(withdrawalsCol);
-
-    for (const wDoc of withdrawalsSnap.docs) {
-      const wData = wDoc.data();
-
-      // Only update if ownerEmail is missing
-      if (!wData.ownerEmail && wData.ownerId) {
-        const ownerRef = doc(db, "owners", wData.ownerId);
-        const ownerSnap = await getDoc(ownerRef);
-
-        if (ownerSnap.exists()) {
-          const ownerEmail = ownerSnap.data().email;
-
-          await updateDoc(doc(db, "withdrawals", wDoc.id), {
-            ownerEmail: ownerEmail || "N/A",
-          });
-
-          console.log(`✅ Updated withdrawal ${wDoc.id} with email: ${ownerEmail}`);
-        } else {
-          console.log(`⚠️ Owner not found for withdrawal ${wDoc.id}`);
-        }
-      }
-    }
-
-    console.log("✅ All old withdrawals processed.");
-  } catch (err) {
-    console.error("❌ Error updating withdrawals:", err);
-  }
-}
-
-// Run the function
-updateOldWithdrawalsWithEmails();
-
-const [allUsers, setAllUsers] = useState([]);       // All registered users
-const [selectedChat, setSelectedChat] = useState(null); // Selected chat user email
-const [messages, setMessages] = useState([]);       // Messages of selected chat
-const [replyText, setReplyText] = useState({});     // Message input text
-
-const currentUserEmail = auth.currentUser?.email;
-
 
 useEffect(() => {
   const fetchUsers = async () => {
@@ -438,6 +483,28 @@ useEffect(() => {
   }
 }, [activePage]);
 
+
+
+
+const [userRole, setUserRole] = useState(""); // <-- define userRole state
+
+useEffect(() => {
+  const auth = getAuth();
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Example: kunin ang role mula sa Firestore user document
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setUserRole(docSnap.data().role); // 'renter', 'owner', or 'admin'
+      }
+    } else {
+      setUserRole(""); // walang user
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
   // ---------- JSX ----------
   return (
    <div className="dashboard-container owner-dashboard">
@@ -469,68 +536,117 @@ useEffect(() => {
 
   <div className="dashboard-content" onClick={() => setSidebarOpen(false)}>
     {/* OWNER PROFILE */}
-    {activePage === "ownerProfile" && (
-      <section className="profile-section">
-        <h2>Owner Profile</h2>
-        {user ? (
-          <div className="profile-container">
-            <img
-              src={photoPreview || "/default-profile.png"}
-              alt="Profile"
-              className="profile-img"
-            />
-            <div className="profile-info">
-              <p>Name: {user.displayName || "No Name"}</p>
-              <p>Email: {user.email || "No Email"}</p>
-              <p>
-                Joined:{" "}
-                {user.createdAt?.toDate
-                  ? user.createdAt.toDate().toLocaleDateString()
-                  : "N/A"}
-              </p>
-            </div>
+   {activePage === "ownerProfile" && userRole === "owner" && (
+  <section className="profile-owner">
+    <h2>Owner Profile</h2>
 
-            {!isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="edit-btn"
-              >
-                Edit
-              </button>
-            )}
+    {user ? (
+      <div className="profile-container">
+        <img
+          src={photoPreview || "/default-profile.png"}
+          alt="Profile"
+          className="profile-img"
+        />
 
-            {isEditing && (
-              <div className="profile-form">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
-                <label>Profile Photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setPhoto(e.target.files[0])}
-                />
-                <div className="profile-form-buttons">
-                  <button onClick={handleSaveProfile} disabled={loading}>
-                    {loading ? "Saving..." : "Save"}
-                  </button>
-                  <button onClick={handleCancel}>Cancel</button>
-                </div>
-              </div>
-            )}
+        <div className="profile-info">
+          <p>Name: {user.displayName || "No Name"}</p>
+          <p>Email: {user.email || "No Email"}</p>
+          <p>
+            Joined:{" "}
+            {user.createdAt?.toDate
+              ? user.createdAt.toDate().toLocaleDateString()
+              : "N/A"}
+          </p>
+        </div>
+
+        {/* Buttons */}
+        {!isEditing && (
+          <div className="profile-actions">
+            <button onClick={() => setIsEditing(true)} className="edit-btn">
+              Edit
+            </button>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="settings-btn"
+            >
+              Settings
+            </button>
           </div>
-        ) : (
-          <p>Loading profile...</p>
         )}
-      </section>
+
+        {/* Edit Profile */}
+        {isEditing && (
+          <div className="profile-form">
+            <label>Full Name</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+
+            <label>Profile Photo</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPhoto(e.target.files[0])}
+            />
+
+            <div className="profile-form-buttons">
+              <button onClick={handleSaveProfile} disabled={loading}>
+                {loading ? "Saving..." : "Save"}
+              </button>
+              <button onClick={handleCancel}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Settings → Change Password */}
+        {showSettings && (
+          <div className="settings-form">
+            <h3>Change Password</h3>
+
+            <label>Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+
+            <label>New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+
+            <label>Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+
+            <div className="profile-form-buttons">
+              <button
+                onClick={handleChangePassword}
+                disabled={passwordLoading}
+              >
+                {passwordLoading ? "Updating..." : "Update Password"}
+              </button>
+              <button onClick={() => setShowSettings(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    ) : (
+      <p>Loading profile...</p>
     )}
+  </section>
+)}
 
   {/* DASHBOARD OVERVIEW */}
-{activePage === "dashboard" && (
-  <section className="overview-section">
+{activePage === "dashboard" && userRole === "owner" && (
+  <section className="overview-owner">
     <h2>Dashboard</h2>
     <div className="overview-cards">
 
@@ -571,8 +687,8 @@ useEffect(() => {
 
 
  {/* TOTAL EARNINGS */}
-{activePage === "totalEarnings" && (
-  <section className="totalearnings-section">
+{activePage === "totalEarnings" && userRole === "owner" && (
+  <section className="totalearnings-owner">
     <h2>Total Earnings</h2>
     <p>Balance: ₱{balance > 0 ? balance.toFixed(2) : "0.00"}</p>
     <p>Withdrawn: ₱{withdrawn.toFixed(2)}</p>
@@ -676,8 +792,8 @@ useEffect(() => {
 
 
  {/* MESSAGES */}
-{activePage === "messages" && (
-  <section className="messages-section">
+{activePage === "messages" && userRole === "owner" && (
+  <section className="messages-owner">
     <h2>Messages</h2>
     <div className="messages-container">
       
@@ -757,39 +873,84 @@ useEffect(() => {
 )}
 
 
-        {/* ADD RENTAL ITEM */}
-        {activePage === "addrentalitem" && (
-          <section className="addpost-section">
-            <h2>Add Rental Item</h2>
-            <form className="addpost-form" onSubmit={handleAddPost}>
-              <div className="form-group">
-                <label>Property Name</label>
-                <input type="text" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/>
-              </div>
-              <div className="form-group">
-                <label>Price (₱)</label>
-                <input type="number" value={formData.price} onChange={e=>setFormData({...formData,price:e.target.value})} required/>
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <textarea value={formData.description} onChange={e=>setFormData({...formData,description:e.target.value})} rows="3"/>
-              </div>
-              <div className="form-group">
-                <label>Upload Image</label>
-                <input type="file" accept="image/*" onChange={e=>{const file=e.target.files[0]; if(file) setFormData(prev=>({...prev,imageFile:file,imagePreview:URL.createObjectURL(file)}))}} required/>
-                {formData.imagePreview && <img src={formData.imagePreview} alt="Preview" style={{width:150,height:150,objectFit:"cover",marginTop:10,borderRadius:8}} />}
-              </div>
-              <div className="form-group checkbox">
-                <label><input type="checkbox" checked={formData.agreed} onChange={e=>setFormData({...formData,agreed:e.target.checked})} required/>I confirm the information is accurate.</label>
-              </div>
-              <button type="submit" className="add-btn" disabled={!formData.agreed}>Submit Rental Item</button>
-            </form>
-          </section>
-        )}
+       {activePage === "addrentalitem" && userRole === "owner" && (
+  <section>
+    <h2>Add Rental Item</h2>
+    <form onSubmit={handleAddPost}>
+      <div>
+        <label>Property Name</label>
+        <input
+          type="text"
+          value={formData.name}
+          onChange={e => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+
+      <div>
+        <label>Price</label>
+        <input
+          type="number"
+          value={formData.price}
+          onChange={e => setFormData({ ...formData, price: e.target.value })}
+          required
+        />
+      </div>
+
+      <div>
+        <label>Description</label>
+        <textarea
+          value={formData.description}
+          onChange={e => setFormData({ ...formData, description: e.target.value })}
+        />
+      </div>
+
+      <div>
+        <label>Maximum Renters</label>
+        <input
+          type="number"
+          min={1}
+          value={formData.maxRenters || ""}
+          onChange={e => setFormData({ ...formData, maxRenters: parseInt(e.target.value) })}
+          required
+        />
+      </div>
+
+      <div>
+        <label>Upload Image</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={e => {
+            const file = e.target.files[0];
+            if (file) setFormData({ ...formData, imageFile: file });
+          }}
+          required
+        />
+      </div>
+
+      <div>
+        <label>
+          <input
+            type="checkbox"
+            checked={formData.agreed}
+            onChange={e => setFormData({ ...formData, agreed: e.target.checked })}
+            required
+          />
+          I confirm the information is accurate.
+        </label>
+      </div>
+
+      <button type="submit" disabled={!formData.agreed || loading}>
+        {loading ? "Submitting..." : "Submit Rental Item"}
+      </button>
+    </form>
+  </section>
+)}
 
         {/* RENTAL ITEMS */}
-        {activePage === "rentalitem" && (
-          <section className="rentalitem-section">
+        {activePage === "rentalitem" && userRole === "owner" && (
+          <section className="rentalitem-owner">
             <h2>Rental Item</h2>
             {posts.length===0 ? <p>No rental items yet.</p> : posts.map(post=>(
               <div key={post.id} className="property-card">

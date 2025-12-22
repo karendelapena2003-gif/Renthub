@@ -21,11 +21,13 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
+   getAuth,
   updateProfile,
   onAuthStateChanged,
   EmailAuthProvider,
   reauthenticateWithCredential,
   signOut,
+  updatePassword,
 } from "firebase/auth";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -78,6 +80,10 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ownerPostsList, setOwnerPostsList] = useState([]);
   const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
   const [ownerNames, setOwnerNames] = useState({});
+const [showSettings, setShowSettings] = useState(false);
+const [currentPassword, setCurrentPassword] = useState("");
+const [newPassword, setNewPassword] = useState("");
+const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
@@ -538,6 +544,7 @@ const handleFormChange = (e) => {
     return updated;
   });
 };
+
 const handleSubmitRental = async (rental) => {
   if (!rentalForm.fullName || !rentalForm.phoneNumber || !rentalForm.address) {
     return alert("Please fill in all required fields");
@@ -1041,7 +1048,61 @@ useEffect(() => {
     }
   }, [activePage]);
 
-  
+  // Confirm password state
+const [confirmPassword, setConfirmPassword] = useState("");
+
+  const handleChangePassword = async () => {
+  if (!currentPassword || !newPassword) {
+    alert("Please fill in all fields");
+    return;
+  }
+
+  try {
+    setPasswordLoading(true);
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    const credential = EmailAuthProvider.credential(
+      user.email,
+      currentPassword
+    );
+
+    // Re-authenticate
+    await reauthenticateWithCredential(user, credential);
+
+    // Update password
+    await updatePassword(user, newPassword);
+
+    alert("Password updated successfully");
+    setCurrentPassword("");
+    setNewPassword("");
+    setShowSettings(false);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    setPasswordLoading(false);
+  }
+};
+
+const [userRole, setUserRole] = useState(""); // <-- define userRole state
+
+useEffect(() => {
+  const auth = getAuth();
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Example: kunin ang role mula sa Firestore user document
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setUserRole(docSnap.data().role); // 'renter', 'owner', or 'admin'
+      }
+    } else {
+      setUserRole(""); // walang user
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
 
   return (
 <div className="dashboard-container renter-dashboard">
@@ -1073,71 +1134,121 @@ useEffect(() => {
 
   <div className="dashboard-content">
     {/* RENTER PROFILE */}
-    {activePage === "renterProfile" && (
-      <section className="profile-section">
-        <h2>Renter Profile</h2>
-        {user ? (
-          <div className="profile-container">
-            <img
-              src={photoPreview || "/default-profile.png"}
-              alt="Profile"
-              className="profile-img"
-            />
-            <div className="profile-info">
-              <p>Name: {user.displayName || "No Name"}</p>
-              <p>Email: {user.email || "No Email"}</p>
-              <p>
-                Joined:{" "}
-                {user.createdAt?.toDate
-                  ? user.createdAt.toDate().toLocaleDateString()
-                  : "N/A"}
-              </p>
-            </div>
+   {activePage === "renterProfile"  && userRole === "renter" && (
+  <section className="profile-renter">
+    <h2>Renter Profile</h2>
 
-            {!isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="edit-btn"
-              >
-                Edit
-              </button>
-            )}
+    {user ? (
+      <div className="profile-container">
+        <img
+          src={photoPreview || "/default-profile.png"}
+          alt="Profile"
+          className="profile-img"
+        />
 
-            {isEditing && (
-              <div className="profile-form">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
+        <div className="profile-info">
+          <p>Name: {user.displayName || "No Name"}</p>
+          <p>Email: {user.email || "No Email"}</p>
+          <p>
+            Joined:{" "}
+            {user.createdAt?.toDate
+              ? user.createdAt.toDate().toLocaleDateString()
+              : "N/A"}
+          </p>
+        </div>
 
-                <label>Profile Photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                />
+        {/* Buttons */}
+        {!isEditing && (
+          <div className="profile-actions">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="edit-btn"
+            >
+              Edit
+            </button>
 
-                <div className="profile-form-buttons">
-                  <button onClick={handleSaveProfile} disabled={loading}>
-                    {loading ? "Saving..." : "Save"}
-                  </button>
-                  <button onClick={handleCancelEdit}>Cancel</button>
-                </div>
-              </div>
-            )}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="settings-btn"
+            >
+              Settings
+            </button>
           </div>
-        ) : (
-          <p>Loading profile...</p>
         )}
-      </section>
+
+        {/* Edit Profile */}
+        {isEditing && (
+          <div className="profile-form">
+            <label>Full Name</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+
+            <label>Profile Photo</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+            />
+
+            <div className="profile-form-buttons">
+              <button onClick={handleSaveProfile} disabled={loading}>
+                {loading ? "Saving..." : "Save"}
+              </button>
+              <button onClick={handleCancelEdit}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {showSettings && (
+  <div className="settings-form">
+    <h3>Change Password</h3>
+
+    <label>Current Password</label>
+    <input
+      type="password"
+      value={currentPassword}
+      onChange={(e) => setCurrentPassword(e.target.value)}
+    />
+
+    <label>New Password</label>
+    <input
+      type="password"
+      value={newPassword}
+      onChange={(e) => setNewPassword(e.target.value)}
+    />
+
+    <label>Confirm New Password</label>
+    <input
+      type="password"
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+    />
+
+    <div className="profile-form-buttons">
+      <button
+        onClick={handleChangePassword}
+        disabled={passwordLoading}
+      >
+        {passwordLoading ? "Updating..." : "Update Password"}
+      </button>
+      <button onClick={() => setShowSettings(false)}>Cancel</button>
+    </div>
+  </div>
+)}
+      </div>
+    ) : (
+      <p>Loading profile...</p>
     )}
+  </section>
+)}
   
 
 {/* BROWSE RENTALS */}
-{activePage === "browseRentals" && (
-  <div className="browse-rentals-page">
+{activePage === "browseRentals" && userRole === "renter" && (
+  <div className="browse-rentals-renter">
     <h1>Browse Rentals</h1>
 
     {/* Search Bar */}
@@ -1349,9 +1460,6 @@ useEffect(() => {
     </>
   )}
 </div>
-
-
-
 
                   <div className="rental-actions">
                     <button onClick={() => handleRentNow(post)}>Rent Now</button>
@@ -1669,8 +1777,8 @@ useEffect(() => {
 
 
 {/* MY RENTALS */}
-{activePage === "myRentals" && (
- <div className="my-rentals-page">
+{activePage === "myRentals" && userRole === "renter" && (
+ <div className="my-rentals-renter">
     <div className="rentals-container">
       <h1 className="rentals-title">My Rentals</h1>
 
@@ -1786,8 +1894,8 @@ useEffect(() => {
 )}
 
 
-       {activePage === "messages" && (
-  <div className="messages-page">
+       {activePage === "messages" && userRole === "renter" && (
+  <div className="messages-renter">
     <h1>Messages</h1>
     <div className="messages-container">
       <div className="conversation-list">
