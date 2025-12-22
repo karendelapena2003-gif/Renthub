@@ -17,7 +17,7 @@ const Sidebar = ({
       { key: "dashboard", label: "Dashboard" },
       { key: "properties", label: "Properties" },
       { key: "users", label: "Users" },
-      { key: "myrentals", label: "My Rentals" },
+      { key: "rentlist", label: "Rent List" },
       { key: "transactions", label: "Transactions" },
       { key: "messages", label: "Messages" },
     ],
@@ -35,7 +35,6 @@ const Sidebar = ({
       { key: "renterProfile", label: "Renter Profile" },
       { key: "browseRentals", label: "Browse Rentals" },
       { key: "myRentals", label: "My Rentals" },
-      { key: "favorites", label: "Favorites" },
       { key: "messages", label: "Messages" },
     ],
   };

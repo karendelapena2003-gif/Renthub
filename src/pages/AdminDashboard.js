@@ -634,8 +634,8 @@ useEffect(() => {
                 <p>Total: {owners.length + renters.length}</p>
                 <small>Owners: {owners.length} · Renters: {renters.length}</small>
               </div>
-              <div className="stat-card" onClick={() => setActivePage("myrentals")}>
-                <h3>My Rentals</h3>
+              <div className="stat-card" onClick={() => setActivePage("rentlist")}>
+                <h3>Rent List</h3>
                 <p>{rentals.length}</p>
               </div>
               <div className="stat-card" onClick={() => setActivePage("transactions")}>
@@ -792,10 +792,10 @@ useEffect(() => {
   </section>
 )}
 
-        {/* My Rentals */}
-        {activePage === "myrentals" && (
-          <section className="admin-myrentals-section">
-            <h2>My Rentals (Grouped by Renter)</h2>
+        {/* Rent List */}
+        {activePage === "rentlist" && (
+          <section className="admin-rentlist-section">
+            <h2>Rent List</h2>
 
             {rentalsByRenter.length === 0 ? (
               <p>No rentals yet.</p>

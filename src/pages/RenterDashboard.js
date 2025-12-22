@@ -17,6 +17,7 @@ import {
   deleteDoc,
   serverTimestamp,
   setDoc,
+  orderBy,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -50,11 +51,8 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
   // Data
   const [posts, setPosts] = useState([]);
   const [myRentals, setMyRentals] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [comments, setComments] = useState({});
-  const [newComments, setNewComments] = useState({});
 
   // Search/filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,8 +60,6 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
   // Rentals & Favorites selection
   const [selectedRentals, setSelectedRentals] = useState([]);
   const [selectAllRentals, setSelectAllRentals] = useState(false);
-  const [selectedFavorites, setSelectedFavorites] = useState([]);
-  const [selectAllFavorites, setSelectAllFavorites] = useState(false);
 
   // Rentals modal
   const [rentalForm, setRentalForm] = useState({
@@ -85,8 +81,6 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
-  const [replyText, setReplyText] = useState({});
-// Track the selected tab
 const [selectedTab, setSelectedTab] = useState("To Pay");
 
 // Filter rentals by selected status
@@ -174,13 +168,6 @@ const filteredRentals = myRentals.filter((r) => r.status === selectedTab);
       )
     );
 
-    // Favorites
-    unsubscribers.push(
-      onSnapshot(
-        query(collection(db, "favorites"), where("renterEmail", "==", renterEmail)),
-        (snap) => setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      )
-    );
 
 
     // Messages
@@ -451,11 +438,20 @@ useEffect(() => {
 }, [initMap, selectedRental]);
 
 
+// At the top of RenterDashboard.js, inside the component
+const [isUploading, setIsUploading] = useState(false); // tracks screenshot upload
+const [uploadedScreenshotUrl, setUploadedScreenshotUrl] = useState(""); // stores uploaded screenshot URL
 
-  // Handle opening rental modal
+ // --- Handle opening rental modal ---
 const handleRentNow = (post) => {
   setSelectedRental(post);
   setShowOwnerProfile(false);
+
+  const dailyRate = Number(post.price) || 0;
+  const rentalDays = 1;
+  const serviceFee = dailyRate * rentalDays * 0.1; // 10% service fee
+  const deliveryFee = 20; // default delivery fee
+  const totalAmount = dailyRate * rentalDays + serviceFee + deliveryFee;
 
   setRentalForm({
     fullName: "",
@@ -466,8 +462,11 @@ const handleRentNow = (post) => {
     province: "",
     paymentMethod: "COD",
     screenshot: null,
-    totalPrice: 0,
-    adminCommission: 0,
+    dailyRate,
+    rentalDays,
+    serviceFee,
+    deliveryFee,
+    totalAmount,
   });
 };
 
@@ -481,14 +480,63 @@ const handleCancelRent = () => {
   }
 };
 
-// Handle form changes
+
 const handleFormChange = (e) => {
-  const { name, value, files, type } = e.target;
-  if (type === "file") {
-    setRentalForm((prev) => ({ ...prev, [name]: files[0] }));
-  } else {
-    setRentalForm((prev) => ({ ...prev, [name]: value }));
+  const { name, value, type, files } = e.target;
+
+  // If file input
+  if (type === "file" && files && files[0]) {
+    const file = files[0];
+    setRentalForm(prev => ({ ...prev, [name]: file }));
+
+    // Optional: Upload immediately for preview
+    if (name === "screenshot") {
+      setIsUploading(true);
+      uploadToCloudinary(file, "renthub/gcash")
+        .then(url => setUploadedScreenshotUrl(url))
+        .catch(err => {
+          console.error(err);
+          alert("GCash screenshot upload failed!");
+        })
+        .finally(() => setIsUploading(false));
+    }
+
+    return; // skip normal update
   }
+
+  setRentalForm((prev) => {
+    const updated = { ...prev, [name]: type === "number" ? Number(value) : value };
+
+    if (name === "rentalDays") {
+      const days = Number(value) || 1;
+
+      // Randomize service fee 10% - 12%
+      const serviceFeePercentage = 9 + Math.random() * 1; // 10% - 12%
+      const serviceFee = prev.dailyRate * days * (serviceFeePercentage / 100);
+
+      // Randomize delivery fee 5% - 7%
+      const deliveryFeePercentage = 5 + Math.random() * 1; // 5% - 7%
+      const deliveryFee = prev.dailyRate * days * (deliveryFeePercentage / 100);
+
+      // Base total
+      let totalAmount = prev.dailyRate * days + serviceFee + deliveryFee;
+
+      // Apply 1% discount if 7 or more days
+      let discount = 0;
+      if (days >= 7) {
+        discount = totalAmount * 0.01;
+        totalAmount -= discount;
+      }
+
+      updated.rentalDays = days;
+      updated.serviceFee = serviceFee;
+      updated.deliveryFee = deliveryFee;
+      updated.discount = discount;
+      updated.totalAmount = totalAmount;
+    }
+
+    return updated;
+  });
 };
 const handleSubmitRental = async (rental) => {
   if (!rentalForm.fullName || !rentalForm.phoneNumber || !rentalForm.address) {
@@ -498,29 +546,17 @@ const handleSubmitRental = async (rental) => {
   try {
     setLoading(true);
 
-    // --- Upload screenshot if GCash ---
+    // --- Use already uploaded screenshot URL if available ---
     let screenshotUrl = "";
-    if (rentalForm.paymentMethod === "GCash" && rentalForm.screenshot) {
-      if (rentalForm.screenshot instanceof File) {
-        const uploaded = await uploadToCloudinary(rentalForm.screenshot, "renthub/gcash");
-        screenshotUrl = uploaded?.secure_url || uploaded || "";
-      } else {
-        screenshotUrl = rentalForm.screenshot;
-      }
+    if (rentalForm.paymentMethod === "GCash") {
+      screenshotUrl = uploadedScreenshotUrl || "";
     }
 
-    // --- Ensure property image is available ---
-    let propertyImageUrl = rental.imageUrl || "";
-    if (!propertyImageUrl && rental.imageFile) {
-      const uploaded = await uploadToCloudinary(rental.imageFile, "renthub/properties");
-      propertyImageUrl = uploaded?.secure_url || uploaded || "/no-image.png";
-    } else if (!propertyImageUrl) {
-      propertyImageUrl = "/no-image.png";
+    // Property image
+    let propertyImageUrl = rental.imageUrl || "/no-image.png";
+    if (!rental.imageUrl && rental.imageFile) {
+      propertyImageUrl = await uploadToCloudinary(rental.imageFile, "renthub/properties");
     }
-
-    // --- Calculate admin commission safely ---
-    const price = Number(rental.price) || 0;
-    const { adminCommission, totalPrice } = calculateAdminCommission(price, rentalForm.address);
 
     // --- Prepare rental data ---
     const rentalData = {
@@ -539,26 +575,29 @@ const handleSubmitRental = async (rental) => {
       gcashAccountName: rentalForm.paymentMethod === "GCash" ? gcashAccountName : "",
       gcashPhoneNumber: rentalForm.paymentMethod === "GCash" ? gcashPhoneNumber : "",
       gcashScreenshot: screenshotUrl,
-      price,
-      adminCommission,
-      totalPrice,
-      status: "To Pay",           // ✅ Ensure default status
+      dailyRate: rentalForm.dailyRate,
+      rentalDays: rentalForm.rentalDays,
+      serviceFee: rentalForm.serviceFee,
+      deliveryFee: rentalForm.deliveryFee,
+      totalAmount: rentalForm.totalAmount,
+      status: "To Pay",
       createdAt: serverTimestamp(),
       dateRented: serverTimestamp(),
     };
 
-    // --- Save rental to Firestore ---
-    const docRef = await addDoc(collection(db, "rentals"), rentalData);
+    // --- Firestore writes in parallel ---
+    const rentalRef = collection(db, "rentals");
+    const propertyRef = doc(db, "properties", rental.id);
 
-    // --- Update property as rented ---
-    if (rental.id) {
-      await updateDoc(doc(db, "properties", rental.id), { isRented: true });
-    }
+    await Promise.all([
+      addDoc(rentalRef, rentalData),
+      updateDoc(propertyRef, { isRented: true }),
+    ]);
 
-    // --- Push rental to admin state immediately for instant display ---
-    setAdminRentalList(prev => [...prev, { id: docRef.id, ...rentalData }]);
+    // --- Update local admin state instantly ---
+    setAdminRentalList((prev) => [...prev, { id: rental.id, ...rentalData }]);
 
-    alert(" ✅ Rental submitted successfully!");
+    alert("✅ Rental submitted successfully!");
 
     // --- Reset form and close modal ---
     setSelectedRental(null);
@@ -572,7 +611,7 @@ const handleSubmitRental = async (rental) => {
       paymentMethod: "COD",
       screenshot: null,
     });
-
+    setUploadedScreenshotUrl(""); // reset uploaded screenshot
   } catch (err) {
     console.error(err);
     alert("Failed to submit rental: " + err.message);
@@ -600,7 +639,7 @@ useEffect(() => {
 }, []);
 
 
-  // ------------------ RENTALS / FAVORITES ------------------
+  // ------------------ RENTALS  ------------------
   const handleSelectAllRentals = () => {
     if (selectAllRentals) {
       setSelectedRentals([]);
@@ -610,27 +649,6 @@ useEffect(() => {
     setSelectAllRentals(!selectAllRentals);
   };
 
-  const handleSelectAllFavorites = () => {
-    if (selectAllFavorites) {
-      setSelectedFavorites([]);
-    } else {
-      setSelectedFavorites(favorites.map((f) => f.id));
-    }
-    setSelectAllFavorites(!selectAllFavorites);
-  };
-
-  const handleDeleteSelectedFavorites = async () => {
-    if (!selectedFavorites.length) return alert("No favorites selected");
-    try {
-      await Promise.all(selectedFavorites.map((id) => deleteDoc(doc(db, "favorites", id))));
-      setSelectedFavorites([]);
-      setSelectAllFavorites(false);
-      alert("Selected favorites removed successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to delete selected favorites!");
-    }
-  };
 
   // Generic delete that matches your JSX signature handleDelete(collectionName, id)
   const handleDelete = async (collectionName, id) => {
@@ -639,7 +657,6 @@ useEffect(() => {
       await deleteDoc(doc(db, collectionName, id));
       // locally remove from states if necessary
       if (collectionName === "rentals") setMyRentals((p) => p.filter((r) => r.id !== id));
-      if (collectionName === "favorites") setFavorites((p) => p.filter((f) => f.id !== id));
       if (collectionName === "notifications") setNotifications((p) => p.filter((n) => n.id !== id));
       if (collectionName === "properties") setPosts((p) => p.filter((item) => item.id !== id));
     } catch (err) {
@@ -783,29 +800,6 @@ useEffect(() => {
       (p.description || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-
-
-  // Add favorite
-  const handleAddFavorite = async (post) => {
-    if (!user) return alert("Login required");
-    try {
-      const exists = favorites.find((f) => f.propertyId === post.id);
-      if (exists) return alert("Already in Favorites");
-      await addDoc(collection(db, "favorites"), {
-        renterEmail,
-        propertyId: post.id,
-        propertyName: post.name,
-        imageUrl: post.imageUrl || "",
-        createdAt: serverTimestamp(),
-      });
-      alert("Added to Favorites!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to add favorite.");
-    }
-  };
-
-
   // Send one-off message (prompt)
   const handleMessageNowPrompt = async (post) => {
     const text = prompt(`Enter your message for ${post.ownerEmail}:`);
@@ -825,45 +819,88 @@ useEffect(() => {
     }
   };
   
-function calculateAdminCommission(price, address) {
-  let adminCommission = price * 0.15; // base 15%
-  const lowerAddr = (address || "").toLowerCase();
 
-  // If far away, add 2%
-  if (!lowerAddr.includes("isabela") && !lowerAddr.includes("negros occidental")) {
-    adminCommission += price * 0.19;
-  }
-
-  // Minimum commission of ₱60 for nearby
-  if ((lowerAddr.includes("isabela") || lowerAddr.includes("negros occidental")) && adminCommission < 60) {
-    adminCommission = 60;
-  }
-
-  const totalPrice = price + adminCommission;
-  return { adminCommission, totalPrice };
-}
 
 const [ownerMessages, setOwnerMessages] = useState({});
+
 useEffect(() => {
-  const unsubscribeList = filteredPosts.map((post) =>
-    onSnapshot(collection(db, "rentals", post.id, "comments"), (snapshot) => {
-      const postComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setComments(prev => ({ ...prev, [post.id]: postComments }));
-    })
-  );
+  const unsubscribes = posts.map(post => {
+    const q = query(
+      collection(db, "rentals", post.id, "comments"),
+      orderBy("createdAt")
+    );
+    return onSnapshot(q, snapshot => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setComments(prev => ({ ...prev, [post.id]: data }));
+    });
+  });
 
-  // Cleanup
-  return () => unsubscribeList.forEach(unsub => unsub());
-}, [filteredPosts]);
+  return () => unsubscribes.forEach(u => u());
+}, [posts]);
 
-// --- Functions ---
+
+const [comments, setComments] = useState({});
+const [newComments, setNewComments] = useState({});
+const [commentImages, setCommentImages] = useState({});
+const [showReplyInput, setShowReplyInput] = useState({});
+const [replyText, setReplyText] = useState({});
+const [showCommentInput, setShowCommentInput] = useState({});
+const [showCommentsSection, setShowCommentsSection] = useState({});
+const handleAddComment = async (postId) => {
+  const text = newComments[postId]?.trim();
+  if (!text && !commentImages[postId]) return;
+
+  let imageUrl = "";
+  if (commentImages[postId] instanceof File) {
+    imageUrl = await uploadToCloudinary(commentImages[postId], "renthub/comments");
+  }
+
+  await addDoc(collection(db, "rentals", postId, "comments"), {
+    userId: auth.currentUser.uid,
+    userName: auth.currentUser.displayName || "Anonymous",
+    comment: text || "",
+    imageUrl,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  setNewComments(prev => ({ ...prev, [postId]: "" }));
+  setCommentImages(prev => ({ ...prev, [postId]: null }));
+};
+
+const handleAddReply = async (postId, commentId) => {
+  const text = replyText[commentId]?.trim();
+  if (!text) return;
+
+  await addDoc(collection(db, "rentals", postId, "comments", commentId, "replies"), {
+    userId: auth.currentUser.uid,
+    userName: auth.currentUser.displayName || "Anonymous",
+    comment: text,
+    createdAt: serverTimestamp(),
+  });
+
+  setReplyText(prev => ({ ...prev, [commentId]: "" }));
+  setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
+};
+const handleEditComment = async (postId, commentId, newText) => {
+  const commentRef = doc(db, "rentals", postId, "comments", commentId);
+  await updateDoc(commentRef, { comment: newText, updatedAt: serverTimestamp() });
+};
+
+const handleUpdateStatus = (id, newStatus) => {
+  const updated = myRentals.map(r => (r.id === id ? { ...r, status: newStatus } : r));
+  setMyRentals(updated);
+};
+
+// Add a new comment
 const handleComment = (postId) => {
   const text = newComments[postId]?.trim();
   if (!text) return;
 
   const newComment = {
     id: Date.now().toString(),
-    user: "You", // replace with actual user
+    userName: auth.currentUser?.displayName || "You",
+    userId: auth.currentUser?.uid,
     comment: text,
     replies: [],
   };
@@ -875,7 +912,17 @@ const handleComment = (postId) => {
 
   setNewComments((prev) => ({ ...prev, [postId]: "" }));
 };
+// Save edited comment
+const handleSaveComment = (postId, commentId) => {
+  setComments(prev => ({
+    ...prev,
+    [postId]: prev[postId].map(c =>
+      c.id === commentId ? { ...c, comment: c.editText, isEditing: false } : c
+    ),
+  }));
+};
 
+// Add a reply to a comment
 const handleReplyComment = (postId, commentId) => {
   const text = replyText[commentId]?.trim();
   if (!text) return;
@@ -884,7 +931,7 @@ const handleReplyComment = (postId, commentId) => {
     ...prev,
     [postId]: prev[postId].map((c) =>
       c.id === commentId
-        ? { ...c, replies: [...c.replies, { id: Date.now().toString(), user: "You", comment: text }] }
+        ? { ...c, replies: [...c.replies, { id: Date.now().toString(), userName: auth.currentUser?.displayName || "You", userId: auth.currentUser?.uid, comment: text }] }
         : c
     ),
   }));
@@ -892,11 +939,22 @@ const handleReplyComment = (postId, commentId) => {
   setReplyText((prev) => ({ ...prev, [commentId]: "" }));
 };
 
-const handleUpdateStatus = (id, newStatus) => {
-  const updated = myRentals.map(r => (r.id === id ? { ...r, status: newStatus } : r));
-  setMyRentals(updated);
+const handleUpdateEditText = (postId, commentId, text) => {
+  setComments(prev => ({
+    ...prev,
+    [postId]: prev[postId].map(c =>
+      c.id === commentId ? { ...c, editText: text } : c
+    ),
+  }));
 };
 
+// Delete a comment
+const handleDeleteComment = (postId, commentId) => {
+  setComments(prev => ({
+    ...prev,
+    [postId]: prev[postId].filter(c => c.id !== commentId) // remove comment by id
+  }));
+};
 
 useEffect(() => {
   if (!renterEmail) return;
@@ -976,9 +1034,6 @@ useEffect(() => {
     setActivePage("messages");
   };
 
-const [showCommentInput, setShowCommentInput] = useState({});
-const [showReplyInput, setShowReplyInput] = useState({});
-const [showCommentsSection, setShowCommentsSection] = useState({});
   // ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
   useEffect(() => {
     if (window.innerWidth <= 768) {
@@ -1147,110 +1202,159 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
                     </button>
                   </div>
 
-                   {/* Comments Section */}
-                <div className="comments-section">
-                  {/* Toggle Comments Section */}
+                  {/* Comments Section */}
+<div className="comments-section">
+  {/* Toggle Comments Section */}
+  <button
+    type="button"
+    onClick={() =>
+      setShowCommentsSection(prev => ({ ...prev, [post.id]: !prev[post.id] }))
+    }
+  >
+    {showCommentsSection[post.id] ? "Hide Comments" : "Show Comments"}
+  </button>
+
+  {showCommentsSection[post.id] && (
+    <>
+      {/* Add Comment */}
+      {!showCommentInput[post.id] && (
+        <button
+          type="button"
+          onClick={() => setShowCommentInput(prev => ({ ...prev, [post.id]: true }))}
+        >
+          Add Comment
+        </button>
+      )}
+
+      {showCommentInput[post.id] && (
+        <div className="comment-input-row">
+          <input
+            type="text"
+            placeholder="Add a comment..."
+            value={newComments[post.id] || ""}
+            onChange={(e) =>
+              setNewComments(prev => ({ ...prev, [post.id]: e.target.value }))
+            }
+          />
+
+          {/* Optional: Upload image proof */}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) =>
+              setCommentImages(prev => ({ ...prev, [post.id]: e.target.files[0] }))
+            }
+          />
+          {commentImages[post.id] && (
+            <img
+              src={URL.createObjectURL(commentImages[post.id])}
+              alt="Preview"
+              style={{ width: 100, marginTop: 4 }}
+            />
+          )}
+
+          <button onClick={() => handleAddComment(post.id)}>Comment</button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewComments(prev => ({ ...prev, [post.id]: "" }));
+              setShowCommentInput(prev => ({ ...prev, [post.id]: false }));
+              setCommentImages(prev => ({ ...prev, [post.id]: null }));
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
+
+      {/* Comments List */}
+      <div className="comments-list">
+        {(comments[post.id] || []).map((c) => {
+          const isOwner = c.userId === auth.currentUser?.uid;
+
+          return (
+            <div key={c.id} className="comment-card">
+              {/* Comment content */}
+              {!c.isEditing ? (
+                <>
+                  <p><strong>{c.userName}:</strong> {c.comment}</p>
+                  {c.imageUrl && (
+                    <img src={c.imageUrl} alt="Comment proof" style={{ width: 120, marginTop: 4 }} />
+                  )}
+
+                  {/* Owner actions */}
+                  {isOwner && (
+                    <div className="comment-actions">
+                      <button onClick={() => handleEditComment(post.id, c.id)}>Edit</button>
+                      <button onClick={() => handleDeleteComment(post.id, c.id)}>Delete</button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="edit-comment-row">
+                  <input
+                    type="text"
+                    value={c.editText}
+                    onChange={(e) => handleUpdateEditText(post.id, c.id, e.target.value)}
+                  />
+                  <button onClick={() => handleSaveComment(post.id, c.id)}>Save</button>
+                  <button onClick={() => handleCancelEdit(post.id, c.id)}>Cancel</button>
+                </div>
+              )}
+
+              {/* Reply Button */}
+              {!showReplyInput[c.id] && (
+                <button
+                  type="button"
+                  onClick={() => setShowReplyInput(prev => ({ ...prev, [c.id]: true }))}
+                >
+                  Reply
+                </button>
+              )}
+
+              {/* Reply Input */}
+              {showReplyInput[c.id] && (
+                <div className="reply-input-row">
+                  <input
+                    type="text"
+                    placeholder="Reply..."
+                    value={replyText[c.id] || ""}
+                    onChange={(e) =>
+                      setReplyText(prev => ({ ...prev, [c.id]: e.target.value }))
+                    }
+                  />
+                  <button onClick={() => handleAddReply(post.id, c.id)}>Reply</button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowCommentsSection(prev => ({ ...prev, [post.id]: !prev[post.id] }))
-                    }
+                    onClick={() => {
+                      setReplyText(prev => ({ ...prev, [c.id]: "" }));
+                      setShowReplyInput(prev => ({ ...prev, [c.id]: false }));
+                    }}
                   >
-                    {showCommentsSection[post.id] ? "Hide Comments" : "Show Comments"}
+                    Close
                   </button>
-
-                  {showCommentsSection[post.id] && (
-                    <>
-                      {/* Add Comment */}
-                      {!showCommentInput[post.id] && (
-                        <button
-                          type="button"
-                          onClick={() => setShowCommentInput(prev => ({ ...prev, [post.id]: true }))}
-                        >
-                          Add Comment
-                        </button>
-                      )}
-
-                      {showCommentInput[post.id] && (
-                        <div className="comment-input-row">
-                          <input
-                            type="text"
-                            placeholder="Add a comment..."
-                            value={newComments[post.id] || ""}
-                            onChange={(e) =>
-                              setNewComments(prev => ({ ...prev, [post.id]: e.target.value }))
-                            }
-                          />
-                          <button onClick={() => handleComment(post.id)}>Comment</button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNewComments(prev => ({ ...prev, [post.id]: "" })); // reset
-                              setShowCommentInput(prev => ({ ...prev, [post.id]: false })); // hide input
-                            }}
-                          >
-                            Close
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Comments List */}
-                      <div className="comments-list">
-                        {(comments[post.id] || []).map((c) => (
-                          <div key={c.id} className="comment-card">
-                            <p><strong>{c.user}:</strong> {c.comment}</p>
-
-                            {/* Reply Button */}
-                            {!showReplyInput[c.id] && (
-                              <button
-                                type="button"
-                                onClick={() => setShowReplyInput(prev => ({ ...prev, [c.id]: true }))}
-                              >
-                                Reply
-                              </button>
-                            )}
-
-                            {/* Reply Input */}
-                            {showReplyInput[c.id] && (
-                              <div className="reply-input-row">
-                                <input
-                                  type="text"
-                                  placeholder="Reply..."
-                                  value={replyText[c.id] || ""}
-                                  onChange={(e) =>
-                                    setReplyText(prev => ({ ...prev, [c.id]: e.target.value }))
-                                  }
-                                />
-                                <button onClick={() => handleReplyComment(post.id, c.id)}>Reply</button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setReplyText(prev => ({ ...prev, [c.id]: "" })); // reset
-                                    setShowReplyInput(prev => ({ ...prev, [c.id]: false })); // hide reply
-                                  }}
-                                >
-                                  Close
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Replies List */}
-                            {c.replies?.map((r) => (
-                              <p key={r.id} className="reply">
-                                <strong>{r.user}:</strong> {r.comment}
-                              </p>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
                 </div>
+              )}
+
+              {/* Replies List */}
+              {c.replies?.map((r) => (
+                <p key={r.id} className="reply">
+                  <strong>{r.userName}:</strong> {r.comment}
+                </p>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  )}
+</div>
+
+
 
 
                   <div className="rental-actions">
                     <button onClick={() => handleRentNow(post)}>Rent Now</button>
-                    <button onClick={() => handleAddFavorite(post)}>♥ Add to Favorites</button>
                     <button
                       onClick={() => {
                         if (window.confirm("Delete this property?")) handleDelete("properties", post.id);
@@ -1268,11 +1372,12 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
       </div>
     )}
 
-   {/* RENT NOW MODAL */}
+{/* RENT NOW MODAL */}
 {selectedRental && (
   <div className="rental-modal-overlay">
     <div className="rental-modal">
       <button className="close-btn" onClick={handleCancelRent}>✖</button>
+
       <h2>{selectedRental.name}</h2>
       <img src={selectedRental.imageUrl || "/no-image.png"} alt={selectedRental.name} />
 
@@ -1284,61 +1389,111 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
         <h4>Fill in your details</h4>
 
         <label>Full Name</label>
-        <input type="text" name="fullName" value={rentalForm.fullName} onChange={handleFormChange} />
+        <input
+          type="text"
+          name="fullName"
+          value={rentalForm.fullName}
+          onChange={handleFormChange}
+        />
 
         <label>Phone Number</label>
-        <input type="text" name="phoneNumber" value={rentalForm.phoneNumber || ""} onChange={handleFormChange} />
+        <input
+          type="text"
+          name="phoneNumber"
+          value={rentalForm.phoneNumber}
+          onChange={handleFormChange}
+        />
 
         <label>Address</label>
-        <input type="text" name="address" value={rentalForm.address || ""} onChange={handleFormChange} />
+        <input
+          type="text"
+          name="address"
+          value={rentalForm.address}
+          onChange={handleFormChange}
+        />
 
         <label>Place Name</label>
-        <input type="text" name="placeName" value={rentalForm.placeName || ""} readOnly />
+        <input
+          type="text"
+          name="placeName"
+          value={rentalForm.placeName}
+          readOnly
+        />
 
         <div id="rental-map" style={{ height: 300, margin: "10px 0", border: "1px solid #ccc" }} />
 
         <label>Postal Code</label>
-        <input type="text" name="postalCode" value={rentalForm.postalCode || ""} onChange={handleFormChange} />
+        <input
+          type="text"
+          name="postalCode"
+          value={rentalForm.postalCode}
+          onChange={handleFormChange}
+        />
 
         <label>Payment Method</label>
-        <select name="paymentMethod" value={rentalForm.paymentMethod} onChange={handleFormChange}>
+        <select
+          name="paymentMethod"
+          value={rentalForm.paymentMethod}
+          onChange={handleFormChange}
+        >
           <option value="COD">Cash on Delivery</option>
           <option value="GCash">GCash</option>
         </select>
 
         {rentalForm.paymentMethod === "GCash" && (
-          <>
-            <div className="gcash-info">
-              <h4>📌 Send Payment To:</h4>
-              <p><strong>GCash Account Name:</strong> {gcashAccountName || "N/A"}</p>
-              <p><strong>GCash Phone Number:</strong> {gcashPhoneNumber || "N/A"}</p>
+          <div className="gcash-info">
+            <h4>📌 Send Payment To:</h4>
+            <p><strong>GCash Account Name:</strong> {gcashAccountName || "N/A"}</p>
+            <p><strong>GCash Phone Number:</strong> {gcashPhoneNumber || "N/A"}</p>
 
-              <label>GCash Screenshot</label>
-              <input type="file" name="screenshot" accept="image/*" onChange={handleFormChange} />
-              {rentalForm.screenshot && (
-                <div style={{ marginTop: 4 }}>
-                  <p>Uploaded ✅</p>
-                  {rentalForm.screenshot instanceof File ? (
-                    <img src={URL.createObjectURL(rentalForm.screenshot)} alt="GCash Screenshot" style={{ width: 180, marginTop: 4 }} />
-                  ) : (
-                    <img src={rentalForm.screenshot} alt="GCash Screenshot" style={{ width: 180, marginTop: 4 }} />
-                  )}
-                </div>
-              )}
-            </div>
-          </>
+            <label>GCash Screenshot</label>
+            <input
+              type="file"
+              name="screenshot"
+              accept="image/*"
+              onChange={handleFormChange}
+            />
+
+            {rentalForm.screenshot && (
+              <div style={{ marginTop: 4 }}>
+                <p>Uploaded ✅</p>
+                <img
+                  src={rentalForm.screenshot instanceof File
+                    ? URL.createObjectURL(rentalForm.screenshot)
+                    : rentalForm.screenshot
+                  }
+                  alt="GCash Screenshot"
+                  style={{ width: 180, marginTop: 4 }}
+                />
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Admin Commission + Total Price */}
-        {rentalForm.address && (() => {
-          const { adminCommission, totalPrice } = calculateAdminCommission(selectedRental.price, rentalForm.address);
-          return (
-            <div className="shipping-info">
-              <p><strong>Admin Commission:</strong> ₱{adminCommission.toFixed(2)}</p>
-              <p><strong>Total Price:</strong> ₱{totalPrice.toFixed(2)}</p>
-            </div>
-          );
-        })()}
+        {/* ----------- Rental Fee Section ----------- */}
+        <div className="rental-fees">
+          <label>Daily Rate</label>
+          <input type="number" name="dailyRate" value={rentalForm.dailyRate.toFixed(2)} readOnly />
+
+          <label>Rental Duration (days)</label>
+          <input
+            type="number"
+            name="rentalDays"
+            min={1}
+            value={rentalForm.rentalDays}
+            onChange={handleFormChange}
+          />
+
+          <p><strong>Service Fee:</strong> ₱{rentalForm.serviceFee.toFixed(2)}</p>
+          <p><strong>Delivery Fee:</strong> ₱{rentalForm.deliveryFee.toFixed(2)}</p>
+
+          {/* Conditional Discount */}
+          {rentalForm.rentalDays >= 7 && (
+            <p><strong>Discount:</strong> ₱{rentalForm.discount.toFixed(2)}</p>
+          )}
+
+          <p><strong>Total Amount:</strong> ₱{rentalForm.totalAmount.toFixed(2)}</p>
+        </div>
 
         <div className="form-buttons">
           <button type="button" className="cancel-btn" onClick={handleCancelRent}>Cancel</button>
@@ -1348,6 +1503,8 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
     </div>
   </div>
 )}
+
+
 
     {/* NORMAL RENTAL GRID */}
     {!showOwnerProfile && !selectedRental && (
@@ -1379,110 +1536,126 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
                   <button onClick={() => handleSendMessageToOwner(post.id, post.ownerEmail)}>Send</button>
                 </div>
 
-           {/* Comments Section */}
-                  <div className="comments-section">
-                    {/* Toggle Comments Section */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowCommentsSection(prev => ({ ...prev, [post.id]: !prev[post.id] }))
-                      }
-                    >
-                      {showCommentsSection[post.id] ? "Hide Comments" : "Show Comments"}
-                    </button>
+                   {/* Comments Section */}
+<div className="comments-section">
+  {/* Toggle Comments Section */}
+  <button
+    type="button"
+    onClick={() =>
+      setShowCommentsSection(prev => ({ ...prev, [post.id]: !prev[post.id] }))
+    }
+  >
+    {showCommentsSection[post.id] ? "Hide Comments" : "Show Comments"}
+  </button>
 
-                    {showCommentsSection[post.id] && (
-                      <>
-                        {/* Add Comment */}
-                        {!showCommentInput[post.id] && (
-                          <button
-                            type="button"
-                            onClick={() => setShowCommentInput(prev => ({ ...prev, [post.id]: true }))}
-                          >
-                            Add Comment
-                          </button>
-                        )}
+  {showCommentsSection[post.id] && (
+    <>
+      {/* Add Comment */}
+      {!showCommentInput[post.id] && (
+        <button
+          type="button"
+          onClick={() => setShowCommentInput(prev => ({ ...prev, [post.id]: true }))}
+        >
+          Add Comment
+        </button>
+      )}
 
-                        {showCommentInput[post.id] && (
-                          <div className="comment-input-row">
-                            <input
-                              type="text"
-                              placeholder="Add a comment..."
-                              value={newComments[post.id] || ""}
-                              onChange={(e) =>
-                                setNewComments(prev => ({ ...prev, [post.id]: e.target.value }))
-                              }
-                            />
-                            <button onClick={() => handleComment(post.id)}>Comment</button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewComments(prev => ({ ...prev, [post.id]: "" })); // reset
-                                setShowCommentInput(prev => ({ ...prev, [post.id]: false })); // hide input
-                              }}
-                            >
-                              Close
-                            </button>
-                          </div>
-                        )}
+      {showCommentInput[post.id] && (
+        <div className="comment-input-row">
+          <input
+            type="text"
+            placeholder="Add a comment..."
+            value={newComments[post.id] || ""}
+            onChange={(e) =>
+              setNewComments(prev => ({ ...prev, [post.id]: e.target.value }))
+            }
+          />
 
-                        {/* Comments List */}
-                        <div className="comments-list">
-                          {(comments[post.id] || []).map((c) => (
-                            <div key={c.id} className="comment-card">
-                              <p><strong>{c.user}:</strong> {c.comment}</p>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                setCommentImages(prev => ({ ...prev, [post.id]: file }));
+              }
+            }}
+          />
 
-                              {/* Reply Button */}
-                              {!showReplyInput[c.id] && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowReplyInput(prev => ({ ...prev, [c.id]: true }))}
-                                >
-                                  Reply
-                                </button>
-                              )}
+          <button onClick={() => handleAddComment(post.id)}>Comment</button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewComments(prev => ({ ...prev, [post.id]: "" }));
+              setCommentImages(prev => ({ ...prev, [post.id]: null }));
+              setShowCommentInput(prev => ({ ...prev, [post.id]: false }));
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
 
-                              {/* Reply Input */}
-                              {showReplyInput[c.id] && (
-                                <div className="reply-input-row">
-                                  <input
-                                    type="text"
-                                    placeholder="Reply..."
-                                    value={replyText[c.id] || ""}
-                                    onChange={(e) =>
-                                      setReplyText(prev => ({ ...prev, [c.id]: e.target.value }))
-                                    }
-                                  />
-                                  <button onClick={() => handleReplyComment(post.id, c.id)}>Reply</button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setReplyText(prev => ({ ...prev, [c.id]: "" })); // reset
-                                      setShowReplyInput(prev => ({ ...prev, [c.id]: false })); // hide reply
-                                    }}
-                                  >
-                                    Close
-                                  </button>
-                                </div>
-                              )}
+      {/* Comments List */}
+      <div className="comments-list">
+        {(comments[post.id] || []).map((c) => (
+          <div key={c.id} className="comment-card">
+            <p>
+              <strong>{c.user}:</strong> {c.comment}
+            </p>
 
-                              {/* Replies List */}
-                              {c.replies?.map((r) => (
-                                <p key={r.id} className="reply">
-                                  <strong>{r.user}:</strong> {r.comment}
-                                </p>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
+            {c.imageUrl && (
+              <img src={c.imageUrl} alt="Comment attachment" style={{ width: 180 }} />
+            )}
+
+            {/* Only show edit/delete for comment owner */}
+            {c.user === auth.currentUser.email && (
+              <div className="comment-actions">
+                <button onClick={() => handleEditComment(post.id, c.id)}>Edit</button>
+                <button onClick={() => handleDeleteComment(post.id, c.id)}>Delete</button>
+              </div>
+            )}
+
+            {/* Replies */}
+            {c.replies?.map((r) => (
+              <p key={r.id} className="reply">
+                <strong>{r.user}:</strong> {r.comment}
+              </p>
+            ))}
+
+            {/* Reply Input (optional: show for everyone or only owner) */}
+            {showReplyInput[c.id] && (
+              <div className="reply-input-row">
+                <input
+                  type="text"
+                  placeholder="Reply..."
+                  value={replyText[c.id] || ""}
+                  onChange={(e) =>
+                    setReplyText(prev => ({ ...prev, [c.id]: e.target.value }))
+                  }
+                />
+                <button onClick={() => handleReplyComment(post.id, c.id)}>Reply</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyText(prev => ({ ...prev, [c.id]: "" }));
+                    setShowReplyInput(prev => ({ ...prev, [c.id]: false }));
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+</div>
 
 
                 <div className="rental-actions">
                   <button onClick={() => handleRentNow(post)}>Rent Now</button>
-                  <button onClick={() => handleAddFavorite(post)}>♥ Add to Favorites</button>
                 </div>
               </div>
             ))
@@ -1611,72 +1784,6 @@ const [showCommentsSection, setShowCommentsSection] = useState({});
     </div>
   </div>
 )}
-
-
-        {/* FAVORITES */}
-        {activePage === "favorites" && (
-          <div className="favorites-page">
-            <h1>My Favorites</h1>
-
-            {favorites.length > 0 ? (
-              <>
-                <div className="select-all-container">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={selectAllFavorites}
-                      onChange={() => {
-                        if (selectAllFavorites) {
-                          setSelectedFavorites([]);
-                        } else {
-                          setSelectedFavorites(favorites.map((f) => f.id));
-                        }
-                        setSelectAllFavorites(!selectAllFavorites);
-                      }}
-                    />{" "}
-                    Select All
-                  </label>
-
-                  <button className="delete-selected-btn" onClick={handleDeleteSelectedFavorites}>
-                    🗑 Delete Selected
-                  </button>
-                </div>
-
-                <div className="rental-grid">
-                  {favorites.map((fav) => (
-                    <div key={fav.id} className={`rental-card ${selectedFavorites.includes(fav.id) ? "selected" : ""}`}>
-                      <input
-                        type="checkbox"
-                        checked={selectedFavorites.includes(fav.id)}
-                        onChange={() => {
-                          if (selectedFavorites.includes(fav.id)) {
-                            setSelectedFavorites(selectedFavorites.filter((id) => id !== fav.id));
-                          } else {
-                            setSelectedFavorites([...selectedFavorites, fav.id]);
-                          }
-                        }}
-                      />
-
-                      <img src={fav.imageUrl || "/no-image.png"} alt={fav.propertyName} className="rental-image" />
-                      <h3>{fav.propertyName}</h3>
-                      <p>
-                        <strong>Added On:</strong> {fav.createdAt?.toDate?.().toLocaleString() || "N/A"}
-                      </p>
-
-                      <div className="rental-actions">
-                        <button className="delete-btn" onClick={() => handleDelete("favorites", fav.id)}>
-                          🗑 Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <p>You haven’t added any favorites yet.</p>
-            )}
-          </div>
-        )}
 
 
        {activePage === "messages" && (
