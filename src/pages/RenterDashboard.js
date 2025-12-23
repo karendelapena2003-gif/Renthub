@@ -88,7 +88,7 @@ const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
-const [selectedTab, setSelectedTab] = useState("To Pay");
+const [selectedTab, setSelectedTab] = useState("Processing");
 
 // Filter rentals by selected status
 const filteredRentals = myRentals.filter((r) => r.status === selectedTab);
@@ -593,7 +593,7 @@ const handleSubmitRental = async (rental) => {
       serviceFee: rentalForm.serviceFee,
       deliveryFee: rentalForm.deliveryFee,
       totalAmount: rentalForm.totalAmount,
-      status: "To Pay",
+      status: "Processing",
       createdAt: serverTimestamp(),
       dateRented: serverTimestamp(),
     };
@@ -1824,7 +1824,7 @@ useEffect(() => {
 
       {/* Tabs */}
       <div className="rentals-tabs">
-        {["To Pay", "To Ship", "To Receive", "Completed", "Returned", "Cancelled"].map(
+        {["Processing", "To Receive", "To deliver", "Completed", "Returned", "Cancelled"].map(
           (tab, index) => (
             <button
               key={tab}
@@ -1871,7 +1871,7 @@ useEffect(() => {
 
               {/* ACTION BUTTONS */}
               <div className="rental-actions">
-                {rental.status === "To Pay" && (
+                {rental.status === "Processing" && (
                   <button
                     className="rental-card-btn cancel-rental-btn"
                     onClick={() => handleUpdateStatus(rental.id, "Cancelled")}
@@ -1890,7 +1890,7 @@ useEffect(() => {
                 )}
 
                 {/* REMOVE BUTTON BELOW CANCEL/RETURNED */}
-                {["To Pay", "Cancelled", "Returned", "Completed"].includes(rental.status) && (
+                {["Processing", "Cancelled", "Returned", "Completed"].includes(rental.status) && (
                   <button
                     className="rental-card-btn delete-rental-btn"
                     onClick={() => handleDeleteRental(rental.id)}

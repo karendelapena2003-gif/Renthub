@@ -237,13 +237,22 @@ const AdminDashboard = ({ onLogout }) => {
     }
   }, [ownerId]);
 
-  const openRentalModal = (rental, renter) => {
-    setRentalModal({
-      ...rental,
-      renterPhoneNumber: rental.renterPhoneNumber || rental.phoneNumber || renter?.phoneNumber || "N/A",
-      renterName: rental.renterName || rental.renterDisplayName || renter?.displayName || rental.renterEmail
-    });
-  };
+  const [showProof, setShowProof] = useState(false);
+
+
+const openRentalModal = (rental, renter) => {
+  setRentalModal({
+    ...rental,
+    dailyRate: rental.dailyRate || rental.price || 0,
+    rentalDays: rental.rentalDays || 1,
+    serviceFee: rental.serviceFee || 0,
+    deliveryFee: rental.deliveryFee || 0,
+    totalAmount: rental.totalAmount || rental.totalPrice || rental.price || 0,
+    renterPhoneNumber: rental.renterPhoneNumber || rental.renterPhone || rental.phoneNumber || renter?.phoneNumber || "N/A",
+    renterName: rental.renterName || rental.renterDisplayName || renter?.displayName || rental.renterEmail || "N/A",
+  });
+};
+
 
   const closeRentalModal = () => {
     setRentalModal(null);
@@ -529,6 +538,21 @@ useEffect(() => {
   }
 }, [activePage]);
 
+// Blocklist state
+const [activeBlocklist, setActiveBlocklist] = useState(false);
+const [blockedUsers, setBlockedUsers] = useState([]); // list of blocked user UIDs
+const [showDetails, setShowDetails] = useState(false);
+
+// Block/Unblock function
+const handleBlockUser = (uid) => {
+  setBlockedUsers(prev => {
+    if (prev.includes(uid)) {
+      return prev.filter(id => id !== uid); // Unblock
+    } else {
+      return [...prev, uid]; // Block
+    }
+  });
+};
 
   /* ---------------- render ---------------- */
   return (
@@ -560,64 +584,94 @@ useEffect(() => {
   />
 
       <div className="main-dashboard">
-        {/* Admin Profile */}
-        {activePage === "adminProfile" && (
-          <section className="profile-section">
-            <h2>Admin Profile</h2>
-            {adminUser ? (
-              <div className="profile-container">
-                <div className="profile-preview">
-                  <img src={photoPreview} alt="Profile" className="profile-img" />
-                  <div className="profile-info">
-                    <p>Name: {adminUser.displayName || "No Name"}</p>
-                    <p>Email: {adminUser.email}</p>
-                    <p>Joined: {adminUser.metadata?.creationTime ? new Date(adminUser.metadata.creationTime).toLocaleDateString() : "N/A"}</p>
-                  </div>
-                </div>
 
-                {!isEditing ? (
-                  <div style={{ marginTop: 12 }}>
-                    <button onClick={() => setIsEditing(true)}>Edit Profile</button>
-                  </div>
-                ) : (
-                  <div className="profile-form">
-                    <label>Full Name</label>
-                    <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+{/* ---------------- ADMIN PROFILE ---------------- */}
+{activePage === "adminProfile" && (
+  <section className="profile-section">
+    <h2>Admin Profile</h2>
+    {adminUser ? (
+      <div className="profile-container">
+        {/* ---------------- PROFILE PREVIEW ---------------- */}
+        <div className="profile-preview">
+          <img src={photoPreview} alt="Profile" className="profile-img" />
+          <div className="profile-info">
+            <p><strong>Name:</strong> {adminUser.displayName || "No Name"}</p>
+            <p><strong>Email:</strong> {adminUser.email}</p>
+            <p><strong>Joined:</strong> {adminUser.metadata?.creationTime ? new Date(adminUser.metadata.creationTime).toLocaleDateString() : "N/A"}</p>
+          </div>
+        </div>
 
-                    <label>Profile Photo</label>
-                    <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+        {/* ---------------- ACTION BUTTONS ---------------- */}
+        {!isEditing ? (
+          <div style={{ marginTop: 12 }}>
+            <button onClick={() => setIsEditing(true)}>Edit Profile</button>
+            <button onClick={() => setActiveBlocklist(true)}>View Blocklist</button>
+          </div>
+        ) : (
+          <div className="profile-form">
+            <label>Full Name</label>
+            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
 
-                    {/* NEW GCASH INFO FIELDS */}
-                    <label>GCash Account Name</label>
-                    <input type="text" value={gcashAccountName} onChange={(e) => setGcashAccountName(e.target.value)} />
+            <label>Profile Photo</label>
+            <input type="file" accept="image/*" onChange={handlePhotoSelect} />
 
-                    <label>GCash Phone Number</label>
-                    <input type="text" value={gcashPhoneNumber} onChange={(e) => setGcashPhoneNumber(e.target.value)} />
+            <label>GCash Account Name</label>
+            <input type="text" value={gcashAccountName} onChange={(e) => setGcashAccountName(e.target.value)} />
 
-                    <div style={{ marginTop: 8 }}>
-                      <button onClick={handleSaveProfile} disabled={loading}>
-                        {loading ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsEditing(false);
-                          setPhotoFile(null);
-                          setPhotoPreview(adminUser.photoURL || "/default-profile.png");
-                          setDisplayName(adminUser.displayName || "");
-                          // reset to last saved (keep values as-is)
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p>Loading profile...</p>
-            )}
-          </section>
+            <label>GCash Phone Number</label>
+            <input type="text" value={gcashPhoneNumber} onChange={(e) => setGcashPhoneNumber(e.target.value)} />
+
+            <div style={{ marginTop: 12 }}>
+              <button onClick={handleSaveProfile} disabled={loading}>
+                {loading ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setPhotoFile(null);
+                  setPhotoPreview(adminUser.photoURL || "/default-profile.png");
+                  setDisplayName(adminUser.displayName || "");
+                }}
+              >
+                Cancel
+              </button>
+              <button onClick={() => setActiveBlocklist(true)}>View Blocklist</button>
+            </div>
+          </div>
         )}
+
+        {/* ---------------- BLOCKLIST MODAL ---------------- */}
+        {activeBlocklist && (
+          <div className="blocklist-modal">
+            <div className="blocklist-modal-content">
+              <button className="close-btn" onClick={() => setActiveBlocklist(false)}>✖ Close</button>
+              <h3>Blocked Users</h3>
+              {blockedUsers.length === 0 ? (
+                <p>No users are blocked.</p>
+              ) : (
+                blockedUsers.map(uid => {
+                  const user = usersList.find(u => u.uid === uid);
+                  if (!user) return null;
+                  return (
+                    <div key={uid} className="blocked-user-item">
+                      <span>{user.email} ({user.role})</span>
+                      <button onClick={() => handleBlockUser(uid)}>Unblock</button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+    ) : (
+      <p>Loading profile...</p>
+    )}
+  </section>
+)}
+
+
 
         {/* Dashboard overview */}
         {activePage === "dashboard" && (
@@ -719,78 +773,91 @@ useEffect(() => {
           </section>
         )}
 
-        {/* Users */}
-{activePage === "users" && (
+    {activePage === "users" && (
   <section className="users-section">
     <h2>Users</h2>
-
     <div className="users-container">
       <div className="users-list">
         <h3>Owners ({owners.length})</h3>
-        {owners.map((o) => (
+        {owners.map(o => (
           <div
             key={o.uid}
             className={`user-item ${selectedUser?.uid === o.uid ? "active" : ""}`}
             onClick={() => setSelectedUser(o)}
           >
-            <strong>{o.email}</strong> {/* Always show email */}
+            <strong>{o.email}</strong>
           </div>
         ))}
 
         <h3>Renters ({renters.length})</h3>
-        {renters.map((r) => (
+        {renters.map(r => (
           <div
             key={r.uid}
             className={`user-item ${selectedUser?.uid === r.uid ? "active" : ""}`}
             onClick={() => setSelectedUser(r)}
           >
-            <strong>{r.email}</strong> {/* Always show email */}
+            <strong>{r.email}</strong>
           </div>
         ))}
       </div>
 
-      {selectedUser && selectedUser.role === "owner" && (
+      {selectedUser && (
         <div className="user-details-panel">
           <div className="panel-header">
             <h3>{selectedUser.email}</h3>
-            <button className="close-btn" onClick={() => setSelectedUser(null)}>✖</button>
+            <button onClick={() => setShowDetails(prev => !prev)}>
+              {showDetails ? "Hide" : "Show"}
+            </button>
+            <button onClick={() => handleBlockUser(selectedUser.uid)}>
+              {blockedUsers.includes(selectedUser.uid) ? "Unblock" : "Block"}
+            </button>
+            <button onClick={() => setSelectedUser(null)}>✖</button>
           </div>
 
-          <p><strong>Email:</strong> {selectedUser.email}</p>
-          <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleString() : formatDate(selectedUser.createdAt)}</p>
-          <p><strong>Role:</strong> {selectedUser.role}</p>
+          {showDetails && (
+            <div className="user-details-content">
+              <p><strong>Email:</strong> {selectedUser.email}</p>
+              <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleString() : formatDate(selectedUser.createdAt)}</p>
+              <p><strong>Role:</strong> {selectedUser.role}</p>
 
-          <h4>Owner's Properties</h4>
-          {properties.filter(p => p.ownerEmail === selectedUser.email).length === 0 ? (
-            <p>No properties</p>
-          ) : (
-            properties.filter(p => p.ownerEmail === selectedUser.email).map(p => (
-              <div key={p.id} className="property-card small">
-                <img src={p.imageUrl || "/no-image.png"} alt={p.name} />
-                <div>
-                  <strong>{p.name}</strong>
-                  <div>Status: {p.status}</div>
-                  <div>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</div>
-                </div>
+              {selectedUser.role === "owner" && (
+                <>
+                  <h4>Owner's Properties</h4>
+                  {properties.filter(p => p.ownerEmail === selectedUser.email).length === 0 ? (
+                    <p>No properties</p>
+                  ) : (
+                    properties.filter(p => p.ownerEmail === selectedUser.email).map(p => (
+                      <div key={p.id} className="property-card small">
+                        <img src={p.imageUrl || "/no-image.png"} alt={p.name} />
+                        <div>
+                          <strong>{p.name}</strong>
+                          <div>Status: {p.status}</div>
+                          <div>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+
+              <div className="message-input">
+                <input
+                  type="text"
+                  placeholder={`Type message to ${selectedUser.role}...`}
+                  value={replyText[selectedUser.email] || ""}
+                  onChange={e => setReplyText(prev => ({ ...prev, [selectedUser.email]: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleSendMessage(selectedUser.email)}
+                />
+                <button onClick={() => handleSendMessage(selectedUser.email)}>Send</button>
               </div>
-            ))
+            </div>
           )}
-
-          <div className="message-input">
-            <input
-              type="text"
-              placeholder="Type message to owner..."
-              value={replyText[selectedUser.email] || ""} // Use email as key
-              onChange={e => setReplyText(prev => ({ ...prev, [selectedUser.email]: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && handleSendMessage(selectedUser.email)}
-            />
-            <button onClick={() => handleSendMessage(selectedUser.email)}>Send</button>
-          </div>
         </div>
       )}
     </div>
   </section>
 )}
+
 
         {/* Rent List */}
         {activePage === "rentlist" && (
@@ -813,7 +880,7 @@ useEffect(() => {
 
                         <div className="admin-rental-details">
                           <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
-                          <div className="admin-rental-price">Price: ₱{it.price || 0}</div>
+                          <div className="admin-rental-price">Price: ₱{it.dailyRate || it.price || 0}</div>
                           <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
                           <div className="admin-rental-status">
                             Status:
@@ -829,53 +896,76 @@ useEffect(() => {
           </section>
         )}
 
-        {/* Rental Modal */}
-        {rentalModal && (
-          <div className="admin-rental-modal">
-            <div className="admin-rental-modal-content">
-              <button onClick={closeRentalModal} className="admin-modal-close">✖</button>
-              <h3 className="rental-modal-title">{rentalModal?.propertyName || "N/A"}</h3>
+       {/* Rental Modal */}
+{rentalModal && (
+  <div className="admin-rental-modal">
+    <div className="admin-rental-modal-content">
+      <button onClick={closeRentalModal} className="admin-modal-close">✖</button>
+      <h3 className="rental-modal-title">{rentalModal?.propertyName || "N/A"}</h3>
 
-              <img src={rentalModal?.propertyImage || rentalModal?.imageUrl || rentalModal?.imageFile || "/no-image.png"} alt={rentalModal?.propertyName || "Property"} className="rental-modal-image" />
+      <img
+        src={rentalModal?.propertyImage || rentalModal?.imageUrl || rentalModal?.imageFile || "/no-image.png"}
+        alt={rentalModal?.propertyName || "Property"}
+        className="rental-modal-image"
+      />
 
-              <div className="rental-modal-info">
-                <div className="rental-modal-item"><strong>Renter Name:</strong> {rentalModal?.renterName || rentalModal?.renterDisplayName || rentalModal?.renterEmail || "N/A"}</div>
-                <div className="rental-modal-item"><strong>Phone:</strong> {rentalModal?.renterPhone || rentalModal?.phoneNumber || rentalModal?.contactNumber || "N/A"}</div>
-                <div className="rental-modal-item"><strong>Address:</strong> {rentalModal?.address || "N/A"}</div>
-                <div className="rental-modal-item"><strong>Postal Code:</strong> {rentalModal?.postalCode || "N/A"}</div>
-                <div className="rental-modal-item"><strong>Place Name:</strong> {rentalModal?.placeName || "N/A"}</div>
-                <div className="rental-modal-item"><strong>Payment Method:</strong> {rentalModal?.paymentMethod || "N/A"}</div>
+      <div className="rental-modal-info">
+        <div className="rental-modal-item"><strong>Owner Email:</strong> {rentalModal?.ownerEmail || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Renter Name:</strong> {rentalModal?.renterName || rentalModal?.renterDisplayName || rentalModal?.renterEmail || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Renter Phone:</strong> {rentalModal?.renterPhoneNumber || rentalModal?.phoneNumber || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Renter Email:</strong> {rentalModal?.renterEmail || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Address:</strong> {rentalModal?.address || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Place Name:</strong> {rentalModal?.placeName || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Postal Code:</strong> {rentalModal?.postalCode || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Province:</strong> {rentalModal?.province || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Payment Method:</strong> {rentalModal?.paymentMethod || "N/A"}</div>
+
+        {rentalModal?.paymentMethod === "GCash" && rentalModal?.proofUrl && (
+          <>
+            <button
+              onClick={() => setShowProof(!showProof)}
+              className="rental-modal-proof-toggle-btn"
+            >
+              {showProof ? "Hide Proof" : "Show Proof"}
+            </button>
+            {showProof && (
+              <div className="rental-modal-payment-proof">
+                <img src={rentalModal?.proofUrl} alt="Proof" className="rental-modal-proof-image" />
               </div>
-
-              {rentalModal?.paymentMethod === "GCash" && rentalModal?.proofUrl && (
-                <div className="rental-modal-payment-proof">
-                  <strong>Payment Proof:</strong>
-                  <img src={rentalModal?.proofUrl} alt="Proof" className="rental-modal-proof-image" />
-                </div>
-              )}
-
-              <div className="rental-modal-item"><strong>Admin Commission:</strong> ₱{rentalModal?.adminCommission || 0}</div>
-              <div className="rental-modal-item"><strong>Total Price:</strong> ₱{rentalModal?.totalPrice || rentalModal?.price || 0}</div>
-
-              <label className="rental-modal-label">Update Status:</label>
-              <select value={rentalStatusEdit} onChange={(e) => setRentalStatusEdit(e.target.value)} className="rental-modal-select">
-                <option value="">--Select--</option>
-                <option value="To Pay">To Pay</option>
-                <option value="To Ship">To Ship</option>
-                <option value="To Receive">To Receive</option>
-                <option value="Completed">Completed</option>
-                <option value="Returned">Returned</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-
-              <div className="rental-modal-actions">
-                <button onClick={() => updateRentalStatus(rentalModal?.id, rentalStatusEdit)} className="rental-modal-update-btn">Update</button>
-                <button onClick={() => removeRental(rentalModal?.id)} className="rental-modal-remove-btn">Remove</button>
-                <button onClick={closeRentalModal} className="rental-modal-close-btn">Close</button>
-              </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
+
+        {/* Rental Breakdown */}
+        <div className="rental-modal-item"><strong>Daily Rate:</strong> ₱{rentalModal?.dailyRate || rentalModal?.price || 0}</div>
+        <div className="rental-modal-item"><strong>Rental Days:</strong> {rentalModal?.rentalDays || 0}</div>
+        <div className="rental-modal-item"><strong>Service Fee:</strong> ₱{rentalModal?.serviceFee || 0}</div>
+        <div className="rental-modal-item"><strong>Delivery Fee:</strong> ₱{rentalModal?.deliveryFee || 0}</div>
+        <div className="rental-modal-item"><strong>Total Amount:</strong> ₱{rentalModal?.totalAmount || rentalModal?.totalPrice || 0}</div>
+      </div>
+
+      <label className="rental-modal-label">Update Status:</label>
+      <select
+        value={rentalStatusEdit}
+        onChange={(e) => setRentalStatusEdit(e.target.value)}
+        className="rental-modal-select"
+      >
+        <option value="">--Select--</option>
+        <option value="To Deliver">To Deliver</option>
+        <option value="To Receive">To Receive</option>
+        <option value="Completed">Completed</option>
+        <option value="Returned">Returned</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+
+      <div className="rental-modal-actions">
+        <button onClick={() => updateRentalStatus(rentalModal?.id, rentalStatusEdit)} className="rental-modal-update-btn">Update</button>
+        <button onClick={() => removeRental(rentalModal?.id)} className="rental-modal-remove-btn">Remove</button>
+        <button onClick={closeRentalModal} className="rental-modal-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Transactions */}
         {activePage === "transactions" && (
