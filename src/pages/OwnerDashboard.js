@@ -46,6 +46,13 @@ const OwnerDashboard = ({ onLogout }) => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
 
+  // Comments states
+  const [comments, setComments] = useState({});
+  const [showCommentsSection, setShowCommentsSection] = useState({});
+  const [newComments, setNewComments] = useState({});
+  const [commentReplyText, setCommentReplyText] = useState({});
+  const [showReplyInput, setShowReplyInput] = useState({});
+
   
   // ---------- Firestore listeners ----------
   useEffect(() => {
@@ -82,6 +89,43 @@ useEffect(() => {
   });
   return () => unsub();
 }, [ownerEmail]);
+
+// Fetch comments for owner's posts
+useEffect(() => {
+  if (!ownerEmail || posts.length === 0) return;
+  const unsubscribers = [];
+  posts.forEach(post => {
+    unsubscribers.push(
+      onSnapshot(collection(db, "rentals", post.id, "comments"), (snap) => {
+        const fetchedComments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setComments(prev => ({ ...prev, [post.id]: fetchedComments }));
+      })
+    );
+  });
+  return () => unsubscribers.forEach(u => u());
+}, [ownerEmail, posts]);
+
+// Fetch replies for owner's posts
+useEffect(() => {
+  if (!ownerEmail || posts.length === 0) return;
+  const unsubscribers = [];
+  posts.forEach(post => {
+    onSnapshot(collection(db, "rentals", post.id, "comments"), (commentsSnap) => {
+      commentsSnap.docs.forEach(commentDoc => {
+        unsubscribers.push(
+          onSnapshot(collection(db, "rentals", post.id, "comments", commentDoc.id, "replies"), (repliesSnap) => {
+            const replies = repliesSnap.docs.map(r => ({ id: r.id, ...r.data() }));
+            setComments(prev => ({
+              ...prev,
+              [post.id]: prev[post.id]?.map(c => c.id === commentDoc.id ? { ...c, replies } : c)
+            }));
+          })
+        );
+      });
+    });
+  });
+  return () => unsubscribers.forEach(u => u());
+}, [ownerEmail, posts]);
 
 
 
@@ -239,8 +283,8 @@ useEffect(() => {
         description: formData.description,
         imageUrl,
         ownerEmail,
+        maxRenters: formData.maxRenters || 1,
         status: "pending",
-        paymentStatus: "Unpaid",
         createdAt: serverTimestamp(),
       });
 
@@ -258,9 +302,34 @@ useEffect(() => {
     try { await deleteDoc(doc(db, "properties", id)); alert("Deleted."); } catch (err) { console.error(err); alert("Failed."); }
   };
 
-  const handlePayNow = async (id) => {
-    try { await updateDoc(doc(db, "properties", id), { paymentStatus: "Paid" }); alert("Marked as Paid."); }
-    catch (err) { console.error(err); alert("Failed."); }
+  // Comments handlers
+  const handleAddReply = async (postId, commentId) => {
+    const text = commentReplyText[commentId]?.trim();
+    if (!text) return;
+
+    await addDoc(collection(db, "rentals", postId, "comments", commentId, "replies"), {
+      userId: auth.currentUser.uid,
+      userName: auth.currentUser.displayName || "Owner",
+      comment: text,
+      createdAt: serverTimestamp(),
+    });
+
+    setCommentReplyText(prev => ({ ...prev, [commentId]: "" }));
+    setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
+  };
+
+  const handleDeleteAllComments = async (postId) => {
+    if (!window.confirm("Delete all comments for this post?")) return;
+    try {
+      const commentsSnap = await getDocs(collection(db, "rentals", postId, "comments"));
+      const deletePromises = commentsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      setComments(prev => ({ ...prev, [postId]: [] }));
+      alert("All comments deleted.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete comments.");
+    }
   };
 
 
@@ -958,10 +1027,92 @@ useEffect(() => {
                 <h3>{post.name}</h3>
                 <p><strong>Price:</strong> ₱{post.price}</p>
                 <p><strong>Status:</strong> {post.status}</p>
-                <p><strong>Payment:</strong> {post.paymentStatus}</p>
                 <div className="property-actions">
                   <button className="delete-btn" onClick={()=>handleDeletePost(post.id)}>🗑️ Delete</button>
-                  {post.status==="pending" && post.paymentStatus==="Unpaid" && <button className="pay-now-btn" onClick={()=>handlePayNow(post.id)}>Pay Now</button>}
+                </div>
+
+                {/* Comments Section */}
+                <div className="comments-section">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowCommentsSection(prev => ({
+                        ...prev,
+                        [post.id]: !prev[post.id]
+                      }))
+                    }
+                  >
+                    {showCommentsSection[post.id] ? "Hide Comments" : "Show Comments"}
+                  </button>
+
+                  {showCommentsSection[post.id] && (
+                    <>
+                      <button onClick={() => handleDeleteAllComments(post.id)}>🗑 Delete All Comments</button>
+
+                      <div className="comments-list">
+                        {(comments[post.id] || []).map((c) => (
+                          <div key={c.id} className="comment-card">
+                            <p>
+                              <strong>{c.userName}:</strong> {c.comment}
+                            </p>
+
+                            {c.imageUrl && (
+                              <img
+                                src={c.imageUrl}
+                                alt="Comment proof"
+                                style={{ width: 120, marginTop: 4 }}
+                              />
+                            )}
+
+                            {!showReplyInput[c.id] && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowReplyInput(prev => ({ ...prev, [c.id]: true }))
+                                }
+                              >
+                                Reply
+                              </button>
+                            )}
+
+                            {showReplyInput[c.id] && (
+                              <div className="reply-input-row">
+                                <input
+                                  type="text"
+                                  placeholder="Reply..."
+                                  value={commentReplyText[c.id] || ""}
+                                  onChange={(e) =>
+                                    setCommentReplyText(prev => ({
+                                      ...prev,
+                                      [c.id]: e.target.value
+                                    }))
+                                  }
+                                />
+                                <button onClick={() => handleAddReply(post.id, c.id)}>
+                                  Reply
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCommentReplyText(prev => ({ ...prev, [c.id]: "" }));
+                                    setShowReplyInput(prev => ({ ...prev, [c.id]: false }));
+                                  }}
+                                >
+                                  Close
+                                </button>
+                              </div>
+                            )}
+
+                            {c.replies?.map((r) => (
+                              <p key={r.id} className="reply">
+                                <strong>{r.userName}:</strong> {r.comment}
+                              </p>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

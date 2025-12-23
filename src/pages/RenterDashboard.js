@@ -18,6 +18,7 @@ import {
   serverTimestamp,
   setDoc,
   orderBy,
+  arrayUnion,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -550,6 +551,10 @@ const handleSubmitRental = async (rental) => {
     return alert("Please fill in all required fields");
   }
 
+  if (rentalForm.paymentMethod === "GCash" && !uploadedScreenshotUrl) {
+    return alert("Please upload GCash screenshot for GCash payment");
+  }
+
   try {
     setLoading(true);
 
@@ -557,6 +562,7 @@ const handleSubmitRental = async (rental) => {
     let screenshotUrl = "";
     if (rentalForm.paymentMethod === "GCash") {
       screenshotUrl = uploadedScreenshotUrl || "";
+      console.log("GCash Screenshot URL:", screenshotUrl);
     }
 
     // Property image
@@ -598,7 +604,10 @@ const handleSubmitRental = async (rental) => {
 
     await Promise.all([
       addDoc(rentalRef, rentalData),
-      updateDoc(propertyRef, { isRented: true }),
+      updateDoc(propertyRef, { 
+        currentRenters: arrayUnion(auth.currentUser.uid),
+        isRented: (rental.currentRenters?.length || 0) + 1 >= (rental.maxRenters || 1) 
+      }),
     ]);
 
     // --- Update local admin state instantly ---
@@ -853,6 +862,7 @@ const [showReplyInput, setShowReplyInput] = useState({});
 const [replyText, setReplyText] = useState({});
 const [showCommentInput, setShowCommentInput] = useState({});
 const [showCommentsSection, setShowCommentsSection] = useState({});
+const [showProof, setShowProof] = useState({});
 const handleAddComment = async (postId) => {
   const text = newComments[postId]?.trim();
   if (!text && !commentImages[postId]) return;
@@ -1279,12 +1289,25 @@ useEffect(() => {
         </div>
 
         <h3>Owner's Posts</h3>
-        {filteredOwnerPosts.filter(p => !p.isRented)
+        {filteredOwnerPosts
+          .filter((post) => {
+            const renters = post.currentRenters || [];
+            const max = post.maxRenters || 1;
+            const userRented = renters.includes(auth.currentUser?.uid);
+            if (renters.length >= max || userRented) return false;
+            return true;
+          })
           .filter(post => post.name.toLowerCase().includes(ownerSearchTerm.toLowerCase()))
           .length > 0 ? (
           <div className="owner-posts-list">
             {filteredOwnerPosts
-              .filter(p => !p.isRented)
+              .filter((post) => {
+                const renters = post.currentRenters || [];
+                const max = post.maxRenters || 1;
+                const userRented = renters.includes(auth.currentUser?.uid);
+                if (renters.length >= max || userRented) return false;
+                return true;
+              })
               .filter(post => post.name.toLowerCase().includes(ownerSearchTerm.toLowerCase()))
               .map((post) => (
                 <div key={post.id} className="owner-post-card">
@@ -1617,9 +1640,21 @@ useEffect(() => {
     {/* NORMAL RENTAL GRID */}
     {!showOwnerProfile && !selectedRental && (
       <div className="rental-grid">
-        {filteredPosts.filter(post => !post.isRented).length > 0 ? (
+        {filteredPosts.filter(post => {
+          const renters = post.currentRenters || [];
+          const max = post.maxRenters || 1;
+          const userRented = renters.includes(auth.currentUser?.uid);
+          if (renters.length >= max || userRented) return false;
+          return true;
+        }).length > 0 ? (
           filteredPosts
-            .filter(post => !post.isRented)
+            .filter(post => {
+              const renters = post.currentRenters || [];
+              const max = post.maxRenters || 1;
+              const userRented = renters.includes(auth.currentUser?.uid);
+              if (renters.length >= max || userRented) return false;
+              return true;
+            })
             .map((post) => (
               <div key={post.id} className="rental-card">
                 <img src={post.imageUrl || "/no-image.png"} alt={post.name} className="rental-image" />
@@ -1709,7 +1744,7 @@ useEffect(() => {
         {(comments[post.id] || []).map((c) => (
           <div key={c.id} className="comment-card">
             <p>
-              <strong>{c.user}:</strong> {c.comment}
+              <strong>{c.userName}:</strong> {c.comment}
             </p>
 
             {c.imageUrl && (
@@ -1717,7 +1752,7 @@ useEffect(() => {
             )}
 
             {/* Only show edit/delete for comment owner */}
-            {c.user === auth.currentUser.email && (
+            {c.userId === auth.currentUser?.uid && (
               <div className="comment-actions">
                 <button onClick={() => handleEditComment(post.id, c.id)}>Edit</button>
                 <button onClick={() => handleDeleteComment(post.id, c.id)}>Delete</button>
@@ -1727,7 +1762,7 @@ useEffect(() => {
             {/* Replies */}
             {c.replies?.map((r) => (
               <p key={r.id} className="reply">
-                <strong>{r.user}:</strong> {r.comment}
+                <strong>{r.userName}:</strong> {r.comment}
               </p>
             ))}
 
@@ -1763,7 +1798,12 @@ useEffect(() => {
 
 
                 <div className="rental-actions">
-                  <button onClick={() => handleRentNow(post)}>Rent Now</button>
+                  <button 
+                    onClick={() => handleRentNow(post)}
+                    disabled={post.currentRenters?.includes(auth.currentUser?.uid)}
+                  >
+                    {post.currentRenters?.includes(auth.currentUser?.uid) ? "Already Rented" : "Rent Now"}
+                  </button>
                 </div>
               </div>
             ))
@@ -1863,27 +1903,42 @@ useEffect(() => {
               {/* DETAILS */}
               <div className="rental-info">
                 <p><strong>Property Name:</strong> {rental.propertyName || "N/A"}</p>
+                <p><strong>Owner Email:</strong> {rental.ownerEmail || "N/A"}</p>
+                <p><strong>Price:</strong> ₱{rental.dailyRate?.toLocaleString() || "0"}</p>
                 <p><strong>Full Name:</strong> {rental.renterName || "N/A"}</p>
                 <p><strong>Phone Number:</strong> {rental.renterPhone || "N/A"}</p>
+                <p><strong>Address:</strong> {rental.address || "N/A"}</p>
                 <p><strong>Place Name:</strong> {rental.placeName || "N/A"}</p>
                 <p><strong>Postal Code:</strong> {rental.postalCode || "N/A"}</p>
-
-                {rental.address && (
-                  <p>
-                    <strong>Address:</strong>{" "}
-                    {typeof rental.address === "object"
-                      ? `${rental.address.street || ""}, ${rental.address.barangay || ""}, ${rental.address.city || ""}, ${rental.address.province || ""}, ${rental.address.region || ""}`
-                      : rental.address}
-                  </p>
+                <p><strong>Payment Method:</strong> {rental.paymentMethod || "N/A"}</p>
+                {rental.paymentMethod === "GCash" && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowProof(prev => ({
+                          ...prev,
+                          [rental.id]: !prev[rental.id]
+                        }))
+                      }
+                    >
+                      {showProof[rental.id] ? "Hide Proof" : "Show Proof"}
+                    </button>
+                    {showProof[rental.id] && rental.gcashScreenshot && (
+                      <div>
+                        <p><strong>GCash Proof:</strong></p>
+                        {console.log("Displaying GCash Screenshot:", rental.gcashScreenshot)}
+                        <img src={rental.gcashScreenshot} alt="GCash Screenshot" style={{ width: 150, marginTop: 4 }} />
+                      </div>
+                    )}
+                  </div>
                 )}
-
-                <p className="total-price">
-                  <strong>Total Price:</strong> ₱{rental.totalPrice?.toLocaleString() || "0"}
-                </p>
-
-                <p>
-                  <strong>Date Rented:</strong> {formatDate(rentalDate)}
-                </p>
+                <p><strong>Daily Rate:</strong> ₱{rental.dailyRate?.toLocaleString() || "0"}</p>
+                <p><strong>Rental Duration (Days):</strong> {rental.rentalDays || "N/A"}</p>
+                <p><strong>Service Fee:</strong> ₱{rental.serviceFee?.toLocaleString() || "0"}</p>
+                <p><strong>Delivery Fee:</strong> ₱{rental.deliveryFee?.toLocaleString() || "0"}</p>
+                <p><strong>Total Amount:</strong> ₱{rental.totalAmount?.toLocaleString() || "0"}</p>
+                <p><strong>Date Rented:</strong> {formatDate(rentalDate)}</p>
               </div>
             </div>
           );
