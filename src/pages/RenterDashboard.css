@@ -284,3 +284,24 @@
 .renter-dashboard button:hover {
   opacity: 0.9;
 }
+
+.renter-dashboard button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+/* ====== TOAST NOTIFICATION ANIMATION ====== */
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

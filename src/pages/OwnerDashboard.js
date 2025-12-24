@@ -45,6 +45,11 @@ const OwnerDashboard = ({ onLogout }) => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showIndividualEarnings, setShowIndividualEarnings] = useState(false);
+  const [completedRentals, setCompletedRentals] = useState([]);
+  const [toastMessage, setToastMessage] = useState("");
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
 
   // Comments states
   const [comments, setComments] = useState({});
@@ -134,8 +139,16 @@ useEffect(() => {
   // ---------- Profile handlers ----------
 
   const handleSaveProfile = async () => {
-    if (!auth.currentUser) return alert("User not logged in.");
-    if (!displayName || displayName.trim() === "") return alert("Display name cannot be empty.");
+    if (!auth.currentUser) {
+      setToastMessage("❌ User not logged in.");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
+    if (!displayName || displayName.trim() === "") {
+      setToastMessage("⚠️ Display name cannot be empty.");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -177,10 +190,12 @@ useEffect(() => {
       setPhoto(null);
       setPhotoPreview(photoURL);
       setIsEditing(false);
-      alert("✅ Profile updated successfully!");
+      setToastMessage("✅ Profile updated successfully!");
+      setTimeout(() => setToastMessage(""), 2500);
     } catch (err) {
       console.error(err);
-      alert(`❌ Failed to update profile: ${err.message}`);
+      setToastMessage(`❌ Failed to update profile: ${err.message}`);
+      setTimeout(() => setToastMessage(""), 4000);
     } finally {
       setLoading(false);
     }
@@ -192,14 +207,16 @@ useEffect(() => {
     setIsEditing(false);
   };
 
-    const handleChangePassword = async () => {
+  const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      alert("Please fill in all fields");
+      setToastMessage("⚠️ Please fill in all fields");
+      setTimeout(() => setToastMessage(""), 3000);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      alert("New password and confirm password do not match");
+      setToastMessage("⚠️ Passwords do not match");
+      setTimeout(() => setToastMessage(""), 3000);
       return;
     }
 
@@ -217,13 +234,17 @@ useEffect(() => {
 
       await updatePassword(user, newPassword);
 
-      alert("Password updated successfully!");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setShowSettings(false);
+      setToastMessage("✅ Password updated successfully!");
+      setTimeout(() => {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowSettings(false);
+        setToastMessage("");
+      }, 1500);
     } catch (error) {
-      alert(error.message);
+      setToastMessage(`❌ ${error.message}`);
+      setTimeout(() => setToastMessage(""), 4000);
     } finally {
       setPasswordLoading(false);
     }
@@ -243,9 +264,18 @@ useEffect(() => {
 
   const handleAddPost = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.price || !formData.imageFile) return alert("⚠️ Fill name, price, image.");
+    
+    // Prevent double submission
+    if (formSubmitting) return;
+    
+    if (!formData.name || !formData.price || !formData.imageFile) {
+      setToastMessage("⚠️ Fill name, price, and image.");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
 
     try {
+      setFormSubmitting(true);
       const data = new FormData();
       data.append("file", formData.imageFile);
       data.append("upload_preset", UPLOAD_PRESET);
@@ -265,18 +295,31 @@ useEffect(() => {
         createdAt: serverTimestamp(),
       });
 
-      alert("✅ Submitted for approval!");
-      setFormData({ name: "", price: "", description: "", imageFile: null, imagePreview: "", agreed: false });
-      setActivePage("rentalitem");
+      setToastMessage("✅ Submitted for approval!");
+      setTimeout(() => {
+        setFormData({ name: "", price: "", description: "", imageFile: null, imagePreview: "", agreed: false });
+        setActivePage("rentalitem");
+        setToastMessage("");
+      }, 1500);
     } catch (error) {
       console.error(error);
-      alert("❌ Failed to add post.");
+      setToastMessage("❌ Failed to add post: " + error.message);
+      setTimeout(() => setToastMessage(""), 4000);
+    } finally {
+      setFormSubmitting(false);
     }
   };
 
   const handleDeletePost = async (id) => {
-    if (!window.confirm("🗑️ Delete this post?")) return;
-    try { await deleteDoc(doc(db, "properties", id)); alert("Deleted."); } catch (err) { console.error(err); alert("Failed."); }
+    try {
+      await deleteDoc(doc(db, "properties", id));
+      setToastMessage("✅ Post deleted successfully");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete post");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
   };
 
   // Comments handlers
@@ -302,13 +345,56 @@ useEffect(() => {
       const deletePromises = commentsSnap.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deletePromises);
       setComments(prev => ({ ...prev, [postId]: [] }));
-      alert("All comments deleted.");
+      setToastMessage("✅ All comments deleted");
+      setTimeout(() => setToastMessage(""), 2500);
     } catch (err) {
       console.error(err);
-      alert("Failed to delete comments.");
+      setToastMessage("❌ Failed to delete comments");
+      setTimeout(() => setToastMessage(""), 3500);
     }
   };
 
+  // Delete all completed earnings
+  const handleDeleteAllEarnings = async () => {
+    if (!window.confirm("🗑️ Delete all completed earnings AND reset balance to ₱0? This action cannot be undone.")) return;
+    try {
+      const deletePromises = completedRentals.map(rental => 
+        deleteDoc(doc(db, "rentals", rental.id))
+      );
+      await Promise.all(deletePromises);
+      
+      // Reset balance to 0 in owner document
+      await updateDoc(doc(db, "owners", auth.currentUser.uid), {
+        totalEarnings: 0,
+      });
+      
+      setCompletedRentals([]);
+      setToastMessage("✅ All completed earnings deleted and balance reset to ₱0");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete earnings");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
+
+  // Delete all withdrawals
+  const handleDeleteAllWithdrawals = async () => {
+    if (!window.confirm("🗑️ Delete all withdrawal history? This action cannot be undone.")) return;
+    try {
+      const deletePromises = withdrawals.map(withdrawal => 
+        deleteDoc(doc(db, "withdrawals", withdrawal.id))
+      );
+      await Promise.all(deletePromises);
+      setWithdrawals([]);
+      setToastMessage("✅ All withdrawal history deleted");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete withdrawal history");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
 
    // ---------- Handle Withdraw ----------
 async function updateOldWithdrawalsWithEmails() {
@@ -380,6 +466,24 @@ const currentUserEmail = auth.currentUser?.email;
     fetchWithdrawals();
   }, [ownerId]);
 
+  // 2.5️⃣ Fetch completed rentals/earnings for owner
+  useEffect(() => {
+    if (!ownerEmail) return;
+    
+    const q = query(
+      collection(db, "rentals"),
+      where("ownerEmail", "==", ownerEmail),
+      where("status", "==", "completed")
+    );
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      const rentalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCompletedRentals(rentalData);
+    });
+    
+    return () => unsub();
+  }, [ownerEmail]);
+
 const totalWithdrawn = withdrawals
     .filter(w => w.status !== "rejected")
     .reduce((sum, w) => sum + Number(w.amount || 0), 0);
@@ -398,10 +502,16 @@ const [showWithdrawals, setShowWithdrawals] = useState(false); // State for togg
 
 const handleWithdraw = async () => {
     if (!withdrawMethod || !withdrawAccountName || !withdrawPhone) {
-      return alert("Please fill in all withdrawal details!");
+      setToastMessage("⚠️ Please fill in all withdrawal details!");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
     }
 
-    if (balance < 1000) return alert("Minimum withdrawal is ₱1,000");
+    if (balance < 500) {
+      setToastMessage("⚠️ Minimum balance of ₱500 required to withdraw");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
 
     const amountToWithdraw = Number(balance);
 
@@ -422,16 +532,19 @@ const handleWithdraw = async () => {
         totalEarnings: 0,
       });
 
-      alert("✅ Withdrawal request submitted!");
-
-      // Reset form
-      setWithdrawMethod("");
-      setWithdrawAccountName("");
-      setWithdrawPhone("");
-      setShowWithdrawForm(false);
+      setToastMessage("✅ Withdrawal request submitted!");
+      setTimeout(() => {
+        // Reset form
+        setWithdrawMethod("");
+        setWithdrawAccountName("");
+        setWithdrawPhone("");
+        setShowWithdrawForm(false);
+        setToastMessage("");
+      }, 1500);
     } catch (err) {
       console.error(err);
-      alert("❌ Failed to submit withdrawal");
+      setToastMessage("❌ Failed to submit withdrawal");
+      setTimeout(() => setToastMessage(""), 4000);
     }
   };
 
@@ -546,8 +659,10 @@ const getChatMessages = (chatUserEmail) =>
 const handleReply = async (receiverEmail) => {
   const text = replyText[receiverEmail];
   if (!text || !currentUserEmail) return;
+  if (messageLoading) return; // Prevent double submission
 
   try {
+    setMessageLoading(true);
     const newMessage = {
       sender: currentUserEmail,
       receiver: receiverEmail,
@@ -563,18 +678,103 @@ const handleReply = async (receiverEmail) => {
   } catch (err) {
     console.error(err);
     alert("❌ Failed to send message.");
+  } finally {
+    setMessageLoading(false);
   }
 };
 
 const handleDeleteConversation = async (chatUserEmail) => {
-  const conv = messages.filter(
-    m =>
-      (m.sender === chatUserEmail && m.receiver === currentUserEmail) ||
-      (m.sender === currentUserEmail && m.receiver === chatUserEmail)
-  );
-  const batch = conv.map(m => deleteDoc(doc(db, "messages", m.id)));
-  await Promise.all(batch);
-  setSelectedChat(null);
+  if (!window.confirm("Delete this conversation?")) return;
+  try {
+    const conv = messages.filter(
+      m =>
+        (m.sender === chatUserEmail && m.receiver === currentUserEmail) ||
+        (m.sender === currentUserEmail && m.receiver === chatUserEmail)
+    );
+    const batch = conv.map(m => deleteDoc(doc(db, "messages", m.id)));
+    await Promise.all(batch);
+    setSelectedChat(null);
+    setToastMessage("✅ Conversation deleted");
+    setTimeout(() => setToastMessage(""), 2500);
+  } catch (err) {
+    console.error(err);
+    setToastMessage("❌ Failed to delete conversation");
+    setTimeout(() => setToastMessage(""), 3500);
+  }
+};
+
+// Handle Support Messages to Admin with Auto-Reply
+const handleSupportMessage = async () => {
+  const text = replyText["renthub-support"]?.trim();
+  if (!text || !currentUserEmail) return alert("Message cannot be empty");
+
+  try {
+    // Send user message to admin
+    const userMessage = {
+      sender: currentUserEmail,
+      receiver: "renthub-support",
+      text,
+      userRole: userRole,
+      status: "pending",
+      createdAt: serverTimestamp(),
+    };
+
+    await addDoc(collection(db, "messages"), userMessage);
+
+    // Create support ticket for admin
+    await addDoc(collection(db, "support_tickets"), {
+      ticketId: `TICKET-${Date.now()}`,
+      sender: currentUserEmail,
+      senderRole: userRole,
+      senderName: displayName || "User",
+      message: text,
+      status: "open",
+      priority: "normal",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    // Intelligent auto-reply based on keywords
+    let autoReplyText = "";
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes("withdrawal") || lowerText.includes("withdraw") || lowerText.includes("payout")) {
+      autoReplyText = "🤖 Withdrawal Support: Minimum withdrawal is ₱500. Submit your GCash details and admin will process within 24-48 hours. Check Withdrawal History for status updates.";
+    } else if (lowerText.includes("earnings") || lowerText.includes("payment") || lowerText.includes("bayad")) {
+      autoReplyText = "🤖 Earnings Support: Your earnings update automatically when renters complete payments. View Individual Earnings for breakdown. Contact admin if you see missing earnings.";
+    } else if (lowerText.includes("property") || lowerText.includes("listing") || lowerText.includes("post")) {
+      autoReplyText = "🤖 Property Management: Add new properties in My Properties section. Include clear photos, accurate descriptions, and competitive pricing. Admin approves listings within 24 hours.";
+    } else if (lowerText.includes("renter") || lowerText.includes("tenant") || lowerText.includes("message")) {
+      autoReplyText = "🤖 Renter Communication: Respond to renter messages promptly in the Messages section. Mark rentals as 'Completed' after successful transaction to receive earnings.";
+    } else if (lowerText.includes("approval") || lowerText.includes("approve") || lowerText.includes("reject")) {
+      autoReplyText = "🤖 Rental Approval: Review rental requests in the Rent List section. Approve or reject based on renter details. Communicate any concerns via Messages before deciding.";
+    } else if (lowerText.includes("account") || lowerText.includes("profile") || lowerText.includes("gcash")) {
+      autoReplyText = "🤖 Account Support: Update your GCash number in Settings for withdrawals. Keep your profile updated with valid contact information. For account issues, admin will assist within 24 hours.";
+    } else if (lowerText.includes("how") || lowerText.includes("paano")) {
+      autoReplyText = "🤖 How to Manage Your Properties:\\n1. Add properties in My Properties section\\n2. Wait for admin approval (24 hours)\\n3. Respond to renter inquiries in Messages\\n4. Approve/reject rental requests in Rent List\\n5. Mark completed rentals to receive earnings\\n6. Withdraw earnings when balance reaches ₱500\\n\\nNeed more help? An admin will respond shortly!";
+    } else {
+      autoReplyText = "🤖 Thank you for contacting RentHub Support! We have received your message and will respond within 24 hours. For urgent concerns, please include 'URGENT' in your message.";
+    }
+
+    // Send auto-reply immediately
+    await addDoc(collection(db, "messages"), {
+      sender: "renthub-support",
+      receiver: currentUserEmail,
+      text: autoReplyText,
+      isAutoReply: true,
+      createdAt: serverTimestamp(),
+    });
+
+    setReplyText(prev => ({ ...prev, "renthub-support": "" }));
+    // Auto-scroll to see reply
+    setTimeout(() => {
+      const chatMessages = document.querySelector('.chat-messages');
+      if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+    }, 500);
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to send support message.");
+  }
 };
 
 // ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
@@ -609,6 +809,37 @@ useEffect(() => {
   // ---------- JSX ----------
   return (
    <div className="dashboard-container owner-dashboard">
+    {/* TOAST NOTIFICATION */}
+    {toastMessage && (
+      <div style={{
+        position: "fixed",
+        top: "20px",
+        right: "20px",
+        background: toastMessage.includes("✅") ? "#4CAF50" : (toastMessage.includes("❌") ? "#f44336" : "#ff9800"),
+        color: "white",
+        padding: "16px 24px",
+        borderRadius: "8px",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+        zIndex: 9999,
+        fontSize: "14px",
+        fontWeight: "500",
+        animation: "slideIn 0.3s ease-in-out",
+      }}>
+        {toastMessage}
+      </div>
+    )}
+    <style>{`
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+    `}</style>
   {/* MENU TOGGLE BUTTON */}
   <button
     className="menu-toggle"
@@ -790,66 +1021,261 @@ useEffect(() => {
  {/* TOTAL EARNINGS */}
 {activePage === "totalEarnings" && userRole === "owner" && (
   <section className="totalearnings-owner">
-    <h2>Total Earnings</h2>
-      <p>Balance: ₱{balance.toFixed(2)}</p>
-      <p>Withdrawn: ₱{withdrawn.toFixed(2)}</p>
-      <p>Minimum Withdraw: ₱1,000</p>
+    <h2>💰 Total Earnings</h2>
 
-      {/* Withdraw Button */}
+    {/* Balance Section */}
+    <div className="balance-section">
+      <div className="balance-card">
+        <p className="balance-label">💵 Current Balance</p>
+        <p className="balance-amount">₱{balance.toFixed(2)}</p>
+        <p className="balance-withdrawn">Withdrawn: ₱{withdrawn.toFixed(2)}</p>
+      </div>
+    </div>
+
+    {/* Withdraw Funds Section */}
+    <div className="withdraw-section">
+      <h3>💳 Withdraw Funds</h3>
+      
       <button
+        className="withdraw-btn"
         onClick={() => setShowWithdrawForm(prev => !prev)}
-        disabled={balance < 1000}
+        disabled={balance < 500}
       >
-        {showWithdrawForm ? "Cancel Withdrawal" : "Withdraw"}
+        {showWithdrawForm ? "❌ Cancel" : "💸 Withdraw Now"}
       </button>
 
-      {/* Withdraw Form */}
-      {showWithdrawForm && (
-        <div className="withdraw-form">
-          <label>Withdrawal Method:</label>
-          <select value={withdrawMethod} onChange={e => setWithdrawMethod(e.target.value)}>
-            <option value="">--Select Method--</option>
-            <option value="GCash">GCash</option>
-            <option value="PayMaya">PayMaya</option>
-          </select>
-
-          <label>Account Name:</label>
-          <input type="text" value={withdrawAccountName} onChange={e => setWithdrawAccountName(e.target.value)} />
-
-          <label>Phone Number:</label>
-          <input type="text" value={withdrawPhone} onChange={e => setWithdrawPhone(e.target.value)} />
-
-          <button disabled={balance < 1000} onClick={handleWithdraw}>
-            Confirm Withdraw
-          </button>
-        </div>
+      {balance < 500 && (
+        <p className="withdraw-info">⚠️ Minimum balance of ₱500 needed to withdraw</p>
       )}
 
-      {/* Past Withdrawals */}
-      <h3>Past Withdrawals</h3>
-      <button onClick={toggleWithdrawals}>
-        {showWithdrawals ? "Hide Past Withdrawals" : "Show Past Withdrawals"}
+      {/* Withdraw Form */}
+      {showWithdrawForm && balance >= 500 && (
+        <div className="withdraw-form">
+          <h4>Withdrawal Details</h4>
+          
+          <div className="form-group">
+            <label>Amount to Withdraw:</label>
+            <input 
+              type="text" 
+              value={`₱${balance.toFixed(2)}`} 
+              disabled 
+              className="withdraw-amount-display"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Withdrawal Method: *</label>
+            <select 
+              value={withdrawMethod} 
+              onChange={e => setWithdrawMethod(e.target.value)}
+              required
+            >
+              <option value="">-- Select Payment Method --</option>
+              <option value="GCash">💚 GCash</option>
+              <option value="PayMaya">💙 PayMaya</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Account Name: *</label>
+            <input 
+              type="text" 
+              value={withdrawAccountName} 
+              onChange={e => setWithdrawAccountName(e.target.value)}
+              placeholder="Enter your full name"
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Phone Number: *</label>
+            <input 
+              type="tel" 
+              value={withdrawPhone} 
+              onChange={e => setWithdrawPhone(e.target.value)}
+              placeholder="09XXXXXXXXX"
+              required
+            />
+          </div>
+
+          <div className="form-actions">
+            <button 
+              className="confirm-withdraw-btn"
+              disabled={balance < 500 || !withdrawMethod || !withdrawAccountName || !withdrawPhone} 
+              onClick={handleWithdraw}
+            >
+              ✅ Confirm Withdrawal
+            </button>
+            <button 
+              className="cancel-btn"
+              onClick={() => {
+                setShowWithdrawForm(false);
+                setWithdrawMethod("");
+                setWithdrawAccountName("");
+                setWithdrawPhone("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* Withdrawal History Section */}
+    <div className="withdrawal-history-section">
+      <h3>📋 Withdrawal History</h3>
+      <button className="toggle-btn" onClick={toggleWithdrawals}>
+        {showWithdrawals ? "🔽 Hide Withdrawal History" : "▶️ Show Withdrawal History"}
       </button>
 
       {showWithdrawals && (
-        <ul>
+        <div className="withdrawals-list">
           {withdrawals.length === 0 ? (
-            <p>No withdrawals yet.</p>
+            <p className="empty-message">📭 No withdrawal history yet.</p>
           ) : (
-            withdrawals.map(w => (
-              <li key={w.id}>
-                <div><strong>Owner:</strong> {w.ownerEmail || "N/A"}</div>
-                <div><strong>Amount:</strong> ₱{Number(w.amount || 0).toFixed(2)}</div>
-                <div><strong>Status:</strong> {w.status || "pending"}</div>
-                <div><strong>Method:</strong> {w.method || "N/A"}</div>
-                <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
-                <div><strong>Phone:</strong> {w.phone || "N/A"}</div>
-              </li>
-            ))
+            <>
+              {/* Delete All Withdrawals Button */}
+              <button 
+                onClick={handleDeleteAllWithdrawals}
+                className="delete-all-earnings-btn"
+              >
+                🗑️ Delete All Withdrawal History
+              </button>
+
+              {withdrawals
+                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                .map(w => (
+                  <div key={w.id} className="withdrawal-item">
+                    <div className="withdrawal-header">
+                      <span className={`status-badge ${w.status}`}>
+                        {w.status === "approved" && "✅ Approved"}
+                        {w.status === "pending" && "⏳ Pending"}
+                        {w.status === "rejected" && "❌ Rejected"}
+                      </span>
+                      <span className="withdrawal-date">
+                        {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : "N/A"}
+                      </span>
+                    </div>
+                    <div className="withdrawal-details">
+                      <div className="detail-row">
+                        <strong>💵 Amount:</strong>
+                        <span>₱{Number(w.amount || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="detail-row">
+                        <strong>💳 Method:</strong>
+                        <span>{w.method || "N/A"}</span>
+                      </div>
+                      <div className="detail-row">
+                        <strong>👤 Account:</strong>
+                        <span>{w.accountName || "N/A"}</span>
+                      </div>
+                      <div className="detail-row">
+                        <strong>📱 Phone:</strong>
+                        <span>{w.phone || "N/A"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              }
+            </>
           )}
-        </ul>
+        </div>
       )}
-    </section>
+    </div>
+
+    {/* Individual Earnings Section */}
+    <div className="individual-earnings-section">
+      <h3>📈 Individual Earnings</h3>
+      <button className="toggle-btn" onClick={() => setShowIndividualEarnings(prev => !prev)}>
+        {showIndividualEarnings ? "🔽 Hide Individual Earnings" : "▶️ Show Individual Earnings"}
+      </button>
+
+      {showIndividualEarnings && (
+        <div className="earnings-list">
+          {/* Current Balance Summary */}
+          <div className="earnings-summary">
+            <h4>💰 Current Balance</h4>
+            <div className="summary-details">
+              <div className="summary-row">
+                <span>Total Balance:</span>
+                <strong>₱{balance.toFixed(2)}</strong>
+              </div>
+              <div className="summary-row">
+                <span>Completed Rentals:</span>
+                <strong>{completedRentals.length} {completedRentals.length === 1 ? 'rental' : 'rentals'}</strong>
+              </div>
+              {completedRentals.length > 0 && (
+                <div className="summary-row">
+                  <span>Total from Rentals:</span>
+                  <strong>₱{completedRentals.reduce((sum, r) => sum + Number(r.price || 0), 0).toFixed(2)}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {completedRentals.length === 0 ? (
+            <div className="empty-earnings">
+              <p className="empty-message">📭 No completed rentals yet.</p>
+              <p className="empty-hint">Your rental earnings will appear here one-by-one when admin completes rentals.</p>
+            </div>
+          ) : (
+            <>
+              {/* Delete All Button */}
+              <button 
+                onClick={handleDeleteAllEarnings}
+                className="delete-all-earnings-btn"
+              >
+                🗑️ Clear All Earnings History
+              </button>
+
+              {/* Individual Earnings Items */}
+              <div className="earnings-items-container">
+                <h4>💵 Earnings Added ({completedRentals.length})</h4>
+                <p className="earnings-hint">View each rental that was completed and added to your balance:</p>
+                {completedRentals
+                  .sort((a, b) => (b.completedAt?.seconds || 0) - (a.completedAt?.seconds || 0))
+                  .map((rental, index) => (
+                    <div key={rental.id} className="earnings-item">
+                      <div className="earnings-item-header">
+                        <span className="earnings-number">#{completedRentals.length - index}</span>
+                        <span className="earnings-date">
+                          {rental.completedAt?.toDate 
+                            ? rental.completedAt.toDate().toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric'
+                              })
+                            : "N/A"}
+                        </span>
+                      </div>
+                      <div className="earnings-details">
+                        <div className="detail-row">
+                          <strong>🏠 Property:</strong>
+                          <span>{rental.name || "N/A"}</span>
+                        </div>
+                        <div className="detail-row highlight">
+                          <strong>💵 Added Amount:</strong>
+                          <span className="price-highlight">₱{Number(rental.price || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="detail-row">
+                          <strong>👤 Renter:</strong>
+                          <span>{rental.renterEmail || "N/A"}</span>
+                        </div>
+                        <div className="detail-row">
+                          <strong>✅ Status:</strong>
+                          <span className="status-badge completed">Completed</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  </section>
 )}
 
 
@@ -858,15 +1284,25 @@ useEffect(() => {
  {/* MESSAGES */}
 {activePage === "messages" && userRole === "owner" && (
   <section className="messages-owner">
-    <h2>Messages</h2>
+    <h2>📩 Messages</h2>
     <div className="messages-container">
       
       {/* Conversation List */}
       <div className="conversation-list">
+        <h3>Conversations</h3>
+        
+        {/* Regular Conversations */}
         {conversationUsers.length === 0 ? (
-          <p>No conversations.</p>
+          <p style={{ fontSize: "13px", color: "#999", marginTop: "10px" }}>No renter messages yet.</p>
         ) : (
-          conversationUsers.map(user => (
+          conversationUsers
+            .filter(user => user !== "renthub-support") // Remove renthub-support
+            .filter(user => messages.some(m => 
+              ((m.sender === ownerEmail && m.receiver === user) || 
+               (m.sender === user && m.receiver === ownerEmail)) && 
+              !m.isAdminReply
+            ))
+            .map(user => (
             <div
               key={user}
               className={`conversation-item ${selectedChat === user ? "active" : ""}`}
@@ -882,11 +1318,18 @@ useEffect(() => {
       <div className="chat-window">
         {selectedChat ? (
           <>
-            <div className="chat-header">
-              <h3>Chat with {selectedChat}</h3>
-              <button onClick={() => handleDeleteConversation(selectedChat)}>🗑 Delete</button>
-              <button onClick={() => setSelectedChat(null)}>✖ Close</button>
+            <div className="chat-header" style={{}}>
+              <h3>
+                Chat with {selectedChat}
+              </h3>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => handleDeleteConversation(selectedChat)}>🗑 Delete</button>
+                <button onClick={() => setSelectedChat(null)}>✖ Close</button>
+              </div>
             </div>
+
+            {/* Welcome Message for Support */}
+            {/* Removed RentHub Support AI welcome message */}
 
             {/* Chat Messages */}
             <div className="chat-messages">
@@ -896,14 +1339,47 @@ useEffect(() => {
                     (m.sender === ownerEmail && m.receiver === selectedChat) ||
                     (m.sender === selectedChat && m.receiver === ownerEmail)
                 )
+                .filter(m => !m.isAdminReply) // Exclude admin replies from regular chats
                 .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
                 .map(m => (
                   <div
                     key={m.id}
                     className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"}`}
+                    style={m.isAutoReply || m.isAdminReply ? {
+                      background: "linear-gradient(135deg, #e8eeff 0%, #f0e8ff 100%)",
+                      border: "2px solid #667eea",
+                      borderRadius: "12px",
+                      padding: "12px 15px"
+                    } : {}}
                   >
-                    <p>{m.text}</p>
-                    <small>
+                    {m.isAutoReply && (
+                      <div style={{ 
+                        fontSize: "11px", 
+                        color: "#667eea", 
+                        fontWeight: "bold", 
+                        marginBottom: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px"
+                      }}>
+                        <span>🤖</span> AI Assistant
+                      </div>
+                    )}
+                    {m.isAdminReply && (
+                      <div style={{ 
+                        fontSize: "11px", 
+                        color: "#667eea", 
+                        fontWeight: "bold", 
+                        marginBottom: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px"
+                      }}>
+                        <span>👤</span> Support Team
+                      </div>
+                    )}
+                    <p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>
+                    <small style={{ opacity: 0.7 }}>
                       {m.createdAt?.toDate
                         ? m.createdAt.toDate().toLocaleTimeString()
                         : new Date().toLocaleTimeString()}
@@ -922,10 +1398,18 @@ useEffect(() => {
                   setReplyText(prev => ({ ...prev, [selectedChat]: e.target.value }))
                 }
                 onKeyDown={e => {
-                  if (e.key === "Enter") handleReply(selectedChat);
+                  if (e.key === "Enter" && !messageLoading) {
+                    handleReply(selectedChat);
+                  }
                 }}
+                disabled={messageLoading}
               />
-              <button onClick={() => handleReply(selectedChat)}>Send</button>
+              <button 
+                onClick={() => handleReply(selectedChat)}
+                disabled={messageLoading}
+              >
+                {messageLoading ? "Sending..." : "Send"}
+              </button>
             </div>
           </>
         ) : (
@@ -1005,8 +1489,8 @@ useEffect(() => {
         </label>
       </div>
 
-      <button type="submit" disabled={!formData.agreed || loading}>
-        {loading ? "Submitting..." : "Submit Rental Item"}
+      <button type="submit" disabled={!formData.agreed || formSubmitting}>
+        {formSubmitting ? "Submitting..." : "Submit Rental Item"}
       </button>
     </form>
   </section>

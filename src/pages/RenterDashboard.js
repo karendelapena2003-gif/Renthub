@@ -86,6 +86,9 @@ const [currentPassword, setCurrentPassword] = useState("");
 const [newPassword, setNewPassword] = useState("");
 const [passwordLoading, setPasswordLoading] = useState(false);
 
+  // Toast notification
+  const [toastMessage, setToastMessage] = useState("");
+
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
 const [selectedTab, setSelectedTab] = useState("Processing");
@@ -202,15 +205,22 @@ const handlePhotoChange = (e) => {
   reader.readAsDataURL(file);
 };
 const handleSaveProfile = async () => {
-  if (!user) return alert("Not logged in");
-  if (!displayName.trim()) return alert("Name cannot be empty");
+  if (!user) {
+    setToastMessage("⚠️ Not logged in");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+  if (!displayName.trim()) {
+    setToastMessage("⚠️ Name cannot be empty");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
   setLoading(true);
   try {
     let photoURL = user.photoURL || "";
     if (photoFile) {
-      const storageRef = ref(storage, `profilePhotos/${user.uid}`);
-      await uploadBytes(storageRef, photoFile);
-      photoURL = await getDownloadURL(storageRef);
+      // Use Cloudinary for faster upload
+      photoURL = await uploadToCloudinary(photoFile, "renthub/profiles");
     }
     try {
       await updateProfile(auth.currentUser, { displayName, photoURL });
@@ -244,10 +254,12 @@ const handleSaveProfile = async () => {
     setUser({ ...user, displayName, photoURL });
     setIsEditing(false);
     setPhotoFile(null);
-    alert("Profile updated!");
+    setToastMessage("✅ Profile updated successfully");
+    setTimeout(() => setToastMessage(""), 2000);
   } catch (err) {
     console.error(err);
-    alert("Failed to update profile: " + err.message);
+    setToastMessage("❌ Failed to update profile");
+    setTimeout(() => setToastMessage(""), 3500);
   } finally {
     setLoading(false);
   }
@@ -548,11 +560,15 @@ const handleFormChange = (e) => {
 
 const handleSubmitRental = async (rental) => {
   if (!rentalForm.fullName || !rentalForm.phoneNumber || !rentalForm.address) {
-    return alert("Please fill in all required fields");
+    setToastMessage("⚠️ Please fill in all required fields");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
   }
 
   if (rentalForm.paymentMethod === "GCash" && !uploadedScreenshotUrl) {
-    return alert("Please upload GCash screenshot for GCash payment");
+    setToastMessage("⚠️ Please upload GCash screenshot for GCash payment");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
   }
 
   try {
@@ -613,7 +629,8 @@ const handleSubmitRental = async (rental) => {
     // --- Update local admin state instantly ---
     setAdminRentalList((prev) => [...prev, { id: rental.id, ...rentalData }]);
 
-    alert("✅ Rental submitted successfully!");
+    setToastMessage("✅ Rental submitted successfully!");
+    setTimeout(() => setToastMessage(""), 2000);
 
     // --- Reset form and close modal ---
     setSelectedRental(null);
@@ -630,7 +647,8 @@ const handleSubmitRental = async (rental) => {
     setUploadedScreenshotUrl(""); // reset uploaded screenshot
   } catch (err) {
     console.error(err);
-    alert("Failed to submit rental: " + err.message);
+    setToastMessage("❌ Failed to submit rental");
+    setTimeout(() => setToastMessage(""), 3500);
   } finally {
     setLoading(false);
   }
@@ -770,14 +788,14 @@ const formatDate = (date) => {
 
 
 const handleDeleteRental = async (id) => {
-  if (!window.confirm("Delete this rental permanently?")) return;
-
   try {
     await deleteDoc(doc(db, "rentals", id));
-    alert("Rental deleted.");
+    setToastMessage("✅ Rental deleted successfully");
+    setTimeout(() => setToastMessage(""), 2000);
   } catch (err) {
     console.error(err);
-    alert("Failed to delete.");
+    setToastMessage("❌ Failed to delete rental");
+    setTimeout(() => setToastMessage(""), 3500);
   }
 };
 
@@ -997,7 +1015,11 @@ useEffect(() => {
 
 // ---------------- MESSAGING ----------------
   const handleSendMessageToOwner = (postId, ownerEmail) => {
-    if (!ownerMessages[postId]) return alert("Cannot send empty message");
+    if (!ownerMessages[postId]) {
+      setToastMessage("⚠️ Cannot send empty message");
+      setTimeout(() => setToastMessage(""), 2500);
+      return;
+    }
     addDoc(collection(db, "messages"), {
       sender: renterEmail,
       receiver: ownerEmail,
@@ -1006,12 +1028,17 @@ useEffect(() => {
       createdAt: serverTimestamp(),
     });
     setOwnerMessages((prev) => ({ ...prev, [postId]: "" }));
-    alert("Message sent!");
+    setToastMessage("✅ Message sent!");
+    setTimeout(() => setToastMessage(""), 2000);
   };
 
   const handleReply = async (chatUser) => {
     const text = replyText[chatUser]?.trim();
-    if (!text) return alert("Cannot send empty message");
+    if (!text) {
+      setToastMessage("⚠️ Cannot send empty message");
+      setTimeout(() => setToastMessage(""), 2500);
+      return;
+    }
     try {
       await addDoc(collection(db, "messages"), {
         sender: renterEmail,
@@ -1020,6 +1047,8 @@ useEffect(() => {
         createdAt: serverTimestamp(),
       });
       setReplyText((prev) => ({ ...prev, [chatUser]: "" }));
+      setToastMessage("✅ Message sent!");
+      setTimeout(() => setToastMessage(""), 2000);
     } catch (err) {
       console.error(err);
       alert("Failed to send message");
@@ -1027,22 +1056,30 @@ useEffect(() => {
   };
 
   
-  const handleDeleteConversation = async (chatUser) => {
-    if (!chatUser) return;
-    if (!window.confirm(`Delete entire conversation with ${chatUser}?`)) return;
-    const snap = await getDocs(collection(db, "messages"));
-    const convo = snap.docs.filter(
-      (d) =>
-        (d.data().sender === renterEmail && d.data().receiver === chatUser) ||
-        (d.data().sender === chatUser && d.data().receiver === renterEmail)
-    );
-    await Promise.all(convo.map((d) => deleteDoc(doc(db, "messages", d.id))));
-    setMessages((prev) => prev.filter(
-      (m) => !(m.sender === renterEmail && m.receiver === chatUser) &&
-             !(m.sender === chatUser && m.receiver === renterEmail)
-    ));
-    setSelectedChat(null);
-    alert("Conversation deleted.");
+  const handleDeleteAllConversations = async () => {
+    if (messages.length === 0) {
+      setToastMessage("⚠️ No conversations to delete");
+      setTimeout(() => setToastMessage(""), 2500);
+      return;
+    }
+    try {
+      setLoading(true);
+      const snap = await getDocs(collection(db, "messages"));
+      const myMessages = snap.docs.filter(
+        (d) => d.data().sender === renterEmail || d.data().receiver === renterEmail
+      );
+      await Promise.all(myMessages.map((d) => deleteDoc(doc(db, "messages", d.id))));
+      setMessages([]);
+      setSelectedChat(null);
+      setToastMessage("✅ All conversations deleted");
+      setTimeout(() => setToastMessage(""), 2000);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete conversations");
+      setTimeout(() => setToastMessage(""), 3500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleMessageNow = (post) => {
@@ -1062,8 +1099,15 @@ useEffect(() => {
 const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleChangePassword = async () => {
-  if (!currentPassword || !newPassword) {
-    alert("Please fill in all fields");
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    setToastMessage("⚠️ Please fill in all fields");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setToastMessage("⚠️ Passwords do not match");
+    setTimeout(() => setToastMessage(""), 2500);
     return;
   }
 
@@ -1083,12 +1127,15 @@ const [confirmPassword, setConfirmPassword] = useState("");
     // Update password
     await updatePassword(user, newPassword);
 
-    alert("Password updated successfully");
+    setToastMessage("✅ Password updated successfully");
+    setTimeout(() => setToastMessage(""), 2000);
     setCurrentPassword("");
     setNewPassword("");
+    setConfirmPassword("");
     setShowSettings(false);
   } catch (error) {
-    alert(error.message);
+    setToastMessage("❌ " + error.message);
+    setTimeout(() => setToastMessage(""), 3500);
   } finally {
     setPasswordLoading(false);
   }
@@ -1951,7 +1998,25 @@ useEffect(() => {
 
        {activePage === "messages" && userRole === "renter" && (
   <div className="messages-renter">
-    <h1>Messages</h1>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+      <h1>Messages</h1>
+      <button 
+        onClick={handleDeleteAllConversations}
+        style={{
+          padding: "10px 20px",
+          backgroundColor: "#f44336",
+          color: "#fff",
+          border: "none",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontWeight: "500",
+          fontSize: "14px"
+        }}
+        disabled={loading}
+      >
+        🗑️ Delete All
+      </button>
+    </div>
     <div className="messages-container">
       <div className="conversation-list">
         <h3>Conversations</h3>
@@ -2008,6 +2073,26 @@ useEffect(() => {
 
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          padding: "16px 20px",
+          backgroundColor: toastMessage.startsWith("✅") ? "#4CAF50" : toastMessage.startsWith("❌") ? "#f44336" : "#ff9800",
+          color: "#fff",
+          borderRadius: "8px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          zIndex: 9999,
+          animation: "slideIn 0.3s ease-out",
+          fontWeight: "500",
+          fontSize: "14px"
+        }}>
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 };
