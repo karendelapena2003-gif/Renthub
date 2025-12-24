@@ -129,29 +129,6 @@ useEffect(() => {
 
 
 
-useEffect(() => {
-if (!ownerId) return;
-const ownerRef = doc(db, "owners", ownerId);
-const unsub = onSnapshot(ownerRef, (docSnap) => {
-if (docSnap.exists()) {
-setEarnings(docSnap.data().earnings || 0);
-}
-});
-return () => unsub();
-}, [ownerId]);
-
-
-// Fetch withdrawals
-useEffect(() => {
-  const fetchWithdrawals = async () => {
-    const q = query(collection(db, "withdrawals"), where("ownerId", "==", ownerId));
-    const snapshot = await getDocs(q);
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // ✅ add id
-    setWithdrawals(data);
-  };
-  if (ownerId) fetchWithdrawals();
-}, [ownerId]);
-
 
 
   // ---------- Profile handlers ----------
@@ -334,62 +311,6 @@ useEffect(() => {
 
 
    // ---------- Handle Withdraw ----------
-
-const totalWithdrawn = withdrawals
-  .filter(w => w.status !== "rejected")
-  .reduce((sum, w) => sum + w.amount, 0);
-  const balance = earnings;
-  const withdrawn = totalWithdrawn;
-  const [withdrawMethod, setWithdrawMethod] = useState("");
-  const [withdrawAccountName, setWithdrawAccountName] = useState("");
-  const [withdrawPhone, setWithdrawPhone] = useState("");
-  const [withdrawPassword, setWithdrawPassword] = useState("");
-  
-  const toggleWithdrawals = () => {
-    setShowWithdrawals((prev) => !prev); 
-  };
-
-const handleWithdraw = async () => {
-  if (!withdrawMethod || !withdrawAccountName || !withdrawPhone) {
-    return alert("Please fill in all withdrawal details!");
-  }
-
-  if (balance < 1000) return alert("Minimum withdrawal is ₱1,000");
-
-  const amountToWithdraw = Number(balance);
-
-  try {
-    await addDoc(collection(db, "withdrawals"), {
-      ownerId: auth.currentUser.uid,
-      ownerEmail: auth.currentUser.email, 
-      amount: amountToWithdraw,
-      method: withdrawMethod,
-      accountName: withdrawAccountName,
-      phone: withdrawPhone,
-      status: "pending",
-      createdAt: serverTimestamp(),
-    });
-
-    await updateDoc(doc(db, "owners", auth.currentUser.uid), {
-      earnings: 0,
-    });
-
-    alert("✅ Withdrawal request submitted!");
-
-    // Reset form
-    setWithdrawMethod("");
-    setWithdrawAccountName("");
-    setWithdrawPhone("");
-  } catch (err) {
-    console.error(err);
-    alert("❌ Failed to submit withdrawal");
-  }
-};
-
-const [showWithdrawForm, setShowWithdrawForm] = useState(false);
-const [showWithdrawals, setShowWithdrawals] = useState(false); // State for toggling visibility
-
-
 async function updateOldWithdrawalsWithEmails() {
   try {
     const withdrawalsCol = collection(db, "withdrawals");
@@ -398,6 +319,7 @@ async function updateOldWithdrawalsWithEmails() {
     for (const wDoc of withdrawalsSnap.docs) {
       const wData = wDoc.data();
 
+      // Only update if ownerEmail is missing
       if (!wData.ownerEmail && wData.ownerId) {
         const ownerRef = doc(db, "owners", wData.ownerId);
         const ownerSnap = await getDoc(ownerRef);
@@ -422,17 +344,127 @@ async function updateOldWithdrawalsWithEmails() {
   }
 }
 
+// Run the function
 updateOldWithdrawalsWithEmails();
 
-
-  // ---------- MESSAGES HANDLERS ----------
-
-const [allUsers, setAllUsers] = useState([]);       
-const [selectedChat, setSelectedChat] = useState(null); 
-const [messages, setMessages] = useState([]);      
-const [replyText, setReplyText] = useState({});    
+const [allUsers, setAllUsers] = useState([]);       // All registered users
+const [selectedChat, setSelectedChat] = useState(null); // Selected chat user email
+const [messages, setMessages] = useState([]);       // Messages of selected chat
+const [replyText, setReplyText] = useState({});     // Message input text
 
 const currentUserEmail = auth.currentUser?.email;
+
+
+// 1️⃣ Listen for real-time total earnings
+  useEffect(() => {
+    if (!ownerId) return;
+    const ownerRef = doc(db, "owners", ownerId);
+    const unsub = onSnapshot(ownerRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setEarnings(Number(docSnap.data().totalEarnings || 0));
+      }
+    });
+    return () => unsub();
+  }, [ownerId]);
+
+  // 2️⃣ Fetch withdrawals
+  useEffect(() => {
+    if (!ownerId) return;
+
+    const q = query(collection(db, "withdrawals"), where("ownerId", "==", ownerId));
+    const fetchWithdrawals = async () => {
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setWithdrawals(data);
+    };
+    fetchWithdrawals();
+  }, [ownerId]);
+
+const totalWithdrawn = withdrawals
+    .filter(w => w.status !== "rejected")
+    .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+
+  const balance = earnings;
+  const withdrawn = totalWithdrawn;
+
+   const toggleWithdrawals = () => setShowWithdrawals(prev => !prev);
+
+  const [withdrawMethod, setWithdrawMethod] = useState("");
+  const [withdrawAccountName, setWithdrawAccountName] = useState("");
+  const [withdrawPhone, setWithdrawPhone] = useState("");
+  const [withdrawPassword, setWithdrawPassword] = useState("");
+const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+const [showWithdrawals, setShowWithdrawals] = useState(false); // State for toggling visibility
+
+const handleWithdraw = async () => {
+    if (!withdrawMethod || !withdrawAccountName || !withdrawPhone) {
+      return alert("Please fill in all withdrawal details!");
+    }
+
+    if (balance < 1000) return alert("Minimum withdrawal is ₱1,000");
+
+    const amountToWithdraw = Number(balance);
+
+    try {
+      await addDoc(collection(db, "withdrawals"), {
+        ownerId: auth.currentUser.uid,
+        ownerEmail: auth.currentUser.email,
+        amount: amountToWithdraw,
+        method: withdrawMethod,
+        accountName: withdrawAccountName,
+        phone: withdrawPhone,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+
+      // Reset owner's balance to 0
+      await updateDoc(doc(db, "owners", auth.currentUser.uid), {
+        totalEarnings: 0,
+      });
+
+      alert("✅ Withdrawal request submitted!");
+
+      // Reset form
+      setWithdrawMethod("");
+      setWithdrawAccountName("");
+      setWithdrawPhone("");
+      setShowWithdrawForm(false);
+    } catch (err) {
+      console.error(err);
+      alert("❌ Failed to submit withdrawal");
+    }
+  };
+
+
+   // 4️⃣ Update old withdrawals with emails (optional cleanup)
+  useEffect(() => {
+    const updateOldWithdrawalsWithEmails = async () => {
+      try {
+        const withdrawalsCol = collection(db, "withdrawals");
+        const withdrawalsSnap = await getDocs(withdrawalsCol);
+
+        for (const wDoc of withdrawalsSnap.docs) {
+          const wData = wDoc.data();
+          if (!wData.ownerEmail && wData.ownerId) {
+            const ownerRef = doc(db, "owners", wData.ownerId);
+            const ownerSnap = await getDoc(ownerRef);
+
+            if (ownerSnap.exists()) {
+              const ownerEmail = ownerSnap.data().email;
+              await updateDoc(doc(db, "withdrawals", wDoc.id), {
+                ownerEmail: ownerEmail || "N/A",
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("❌ Error updating withdrawals:", err);
+      }
+    };
+
+    updateOldWithdrawalsWithEmails();
+  }, []);
+
 
 useEffect(() => {
   if (!ownerEmail) return;
@@ -759,104 +791,67 @@ useEffect(() => {
 {activePage === "totalEarnings" && userRole === "owner" && (
   <section className="totalearnings-owner">
     <h2>Total Earnings</h2>
-    <p>Balance: ₱{balance > 0 ? balance.toFixed(2) : "0.00"}</p>
-    <p>Withdrawn: ₱{withdrawn.toFixed(2)}</p>
-    <p>Minimum Withdraw: ₱1,000</p>
+      <p>Balance: ₱{balance.toFixed(2)}</p>
+      <p>Withdrawn: ₱{withdrawn.toFixed(2)}</p>
+      <p>Minimum Withdraw: ₱1,000</p>
 
-    {/* Withdraw Button */}
-    <button
-      className="show-withdraw-form-btn"
-      onClick={() => setShowWithdrawForm(prev => !prev)}
-      disabled={balance < 1000}
-    >
-      {showWithdrawForm ? "Cancel Withdrawal" : "Withdraw"}
-    </button>
+      {/* Withdraw Button */}
+      <button
+        onClick={() => setShowWithdrawForm(prev => !prev)}
+        disabled={balance < 1000}
+      >
+        {showWithdrawForm ? "Cancel Withdrawal" : "Withdraw"}
+      </button>
 
-    {/* Conditional Withdraw Form */}
-    {showWithdrawForm && (
-      <div className="withdraw-form">
-        <label>Withdrawal Method:</label>
-        <select
-          value={withdrawMethod}
-          onChange={(e) => setWithdrawMethod(e.target.value)}
-        >
-          <option value="">--Select Method--</option>
-          <option value="GCash">GCash</option>
-          <option value="PayMaya">PayMaya</option>
-        </select>
+      {/* Withdraw Form */}
+      {showWithdrawForm && (
+        <div className="withdraw-form">
+          <label>Withdrawal Method:</label>
+          <select value={withdrawMethod} onChange={e => setWithdrawMethod(e.target.value)}>
+            <option value="">--Select Method--</option>
+            <option value="GCash">GCash</option>
+            <option value="PayMaya">PayMaya</option>
+          </select>
 
-        <label>Account Name:</label>
-        <input
-          type="text"
-          value={withdrawAccountName}
-          onChange={(e) => setWithdrawAccountName(e.target.value)}
-        />
+          <label>Account Name:</label>
+          <input type="text" value={withdrawAccountName} onChange={e => setWithdrawAccountName(e.target.value)} />
 
-        <label>Phone Number:</label>
-        <input
-          type="text"
-          value={withdrawPhone}
-          onChange={(e) => setWithdrawPhone(e.target.value)}
-        />
+          <label>Phone Number:</label>
+          <input type="text" value={withdrawPhone} onChange={e => setWithdrawPhone(e.target.value)} />
 
-        <button
-          disabled={balance < 1000}
-          onClick={handleWithdraw}
-          className="withdraw-btn"
-        >
-          Confirm Withdraw
-        </button>
-      </div>
-    )}
+          <button disabled={balance < 1000} onClick={handleWithdraw}>
+            Confirm Withdraw
+          </button>
+        </div>
+      )}
 
-    {/* Toggle Past Withdrawals */}
-    <h3>Past Withdrawals</h3>
-    <button onClick={toggleWithdrawals} className="toggle-withdrawals-btn">
-      {showWithdrawals ? "Hide Past Withdrawals" : "Show Past Withdrawals"}
-    </button>
+      {/* Past Withdrawals */}
+      <h3>Past Withdrawals</h3>
+      <button onClick={toggleWithdrawals}>
+        {showWithdrawals ? "Hide Past Withdrawals" : "Show Past Withdrawals"}
+      </button>
 
-    {showWithdrawals && (
-      <ul>
-        {withdrawals.length === 0 ? (
-          <p>No withdrawals yet.</p>
-        ) : (
-          withdrawals.map((w) => (
-            <li key={w.id} style={{ marginBottom: "12px", padding: "8px", border: "1px solid #ccc", borderRadius: "6px", backgroundColor: "#f9f9f9" }}>
-              <div><strong>Owner:</strong> {w.ownerEmail || "N/A"}</div>
-              <div><strong>Amount:</strong> ₱{Number(w.amount || 0).toFixed(2)}</div>
-              <div>
-                <strong>Status:</strong>{" "}
-                <span style={{ cursor: "pointer", textDecoration: "underline" }}>
-                  {w.status || "pending"}
-                </span>
-              </div>
-              <div><strong>Method:</strong> {w.method || "N/A"}</div>
-              <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
-              <div><strong>Phone:</strong> {w.phone || "N/A"}</div>
-
-              <button
-                style={{ marginTop: 6 }}
-                onClick={async () => {
-                  if (window.confirm("Remove this withdrawal?")) {
-                    try {
-                      await deleteDoc(doc(db, "withdrawals", w.id));
-                      setWithdrawals(prev => prev.filter(item => item.id !== w.id));
-                    } catch (err) {
-                      console.error(err);
-                      alert("Failed to remove withdrawal");
-                    }
-                  }
-                }}
-              >
-                Remove
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
-    )}
-  </section>
+      {showWithdrawals && (
+        <ul>
+          {withdrawals.length === 0 ? (
+            <p>No withdrawals yet.</p>
+          ) : (
+            withdrawals.map(w => (
+              <li key={w.id}>
+                <div><strong>Owner:</strong> {w.ownerEmail || "N/A"}</div>
+                <div><strong>Amount:</strong> ₱{Number(w.amount || 0).toFixed(2)}</div>
+                <div><strong>Status:</strong> {w.status || "pending"}</div>
+                <div><strong>Method:</strong> {w.method || "N/A"}</div>
+                <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
+                <div><strong>Phone:</strong> {w.phone || "N/A"}</div>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </section>
 )}
+
 
 
 

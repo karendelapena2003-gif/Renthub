@@ -259,49 +259,71 @@ const openRentalModal = (rental, renter) => {
     setRentalStatusEdit("");
   };
 
-  const updateRentalStatus = async (rentalId, status) => {
-    if (!rentalId || !status) return;
-    try {
-      const rentalRef = doc(db, "rentals", rentalId);
-      const rentalSnap = await getDoc(rentalRef);
-      if (!rentalSnap.exists()) return console.error("Rental not found");
+  // Update rental status (admin)
+const updateRentalStatus = async (rentalId, status) => {
+  if (!rentalId || !status) return;
 
-      const rentalData = rentalSnap.data();
-      await updateDoc(rentalRef, { status, updatedAt: serverTimestamp() });
+  try {
+    const rentalRef = doc(db, "rentals", rentalId);
+    const rentalSnap = await getDoc(rentalRef);
 
-      // If Completed, update owner's earnings (if owners collection exists)
-      if (status === "Completed") {
-        let ownerRef = null;
-        let ownerData = null;
+    if (!rentalSnap.exists()) {
+      console.error("Rental not found");
+      return;
+    }
 
-        if (rentalData.ownerId) {
-          ownerRef = doc(db, "owners", rentalData.ownerId);
-          const ownerSnap = await getDoc(ownerRef);
-          if (!ownerSnap.exists()) {
-            ownerRef = null;
-          } else ownerData = ownerSnap.data();
-        }
+    const rentalData = rentalSnap.data();
+    const previousStatus = rentalData.status;
 
-        if (!ownerRef && rentalData.ownerEmail) {
-          const ownerQuery = query(collection(db, "owners"), where("email", "==", rentalData.ownerEmail));
-          const ownerSnap = await getDocs(ownerQuery);
-          if (!ownerSnap.empty) {
-            ownerRef = ownerSnap.docs[0].ref;
-            ownerData = ownerSnap.docs[0].data();
-          }
-        }
+    // Update the rental status
+    await updateDoc(rentalRef, {
+      status,
+      updatedAt: serverTimestamp(),
+    });
 
-        if (ownerRef) {
-          const earningsToAdd = Number(rentalData.price || 0);
-          await updateDoc(ownerRef, {
-            earnings: (ownerData?.earnings || 0) + earningsToAdd,
-          });
+    // ✅ Only add earnings ONCE when changing to Completed
+    if (previousStatus !== "Completed" && status === "Completed") {
+      let ownerRef = null;
+
+      // Try to find owner by ownerId first
+      if (rentalData.ownerId) {
+        const ref = doc(db, "owners", rentalData.ownerId);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          ownerRef = ref;
         }
       }
-    } catch (err) {
-      console.error("Error updating rental status:", err);
+
+      // Fallback: find owner by email
+      if (!ownerRef && rentalData.ownerEmail) {
+        const ownerQuery = query(
+          collection(db, "owners"),
+          where("email", "==", rentalData.ownerEmail)
+        );
+        const ownerSnap = await getDocs(ownerQuery);
+        if (!ownerSnap.empty) {
+          ownerRef = ownerSnap.docs[0].ref;
+        }
+      }
+
+      // Update earnings using increment()
+      if (ownerRef) {
+        const earningsToAdd = Number(
+          rentalData.totalAmount || rentalData.totalPrice || rentalData.price || 0
+        );
+
+        if (earningsToAdd > 0) {
+          await updateDoc(ownerRef, {
+            totalEarnings: increment(earningsToAdd),
+          });
+          console.log(`✅ Added ₱${earningsToAdd} to owner earnings`);
+        }
+      }
     }
-  };
+  } catch (err) {
+    console.error("Error updating rental status:", err);
+  }
+};
 
   const removeRental = async (rentalId) => {
     // update local grouping state first
