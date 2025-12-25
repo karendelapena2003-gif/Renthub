@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -36,7 +36,13 @@ const Login = () => {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        const role = docSnap.data().role;
+        const data = docSnap.data();
+        if (data.blocked || data.deleted) {
+          await signOut(auth);
+          setError("This account is blocked or deleted.");
+          return;
+        }
+        const role = data.role;
         if (role === "owner") navigate("/owner-dashboard");
         else if (role === "renter") navigate("/renter-dashboard");
         else navigate("/unauthorized");
@@ -92,7 +98,14 @@ const Login = () => {
         await setDoc(docRef, { email: user.email, role: "renter", createdAt: new Date() });
       }
 
-      const role = docSnap.exists() ? docSnap.data().role : "renter";
+      const data = docSnap.exists() ? docSnap.data() : { role: "renter" };
+      if (data.blocked || data.deleted) {
+        await signOut(auth);
+        setError("This account is blocked or deleted.");
+        return;
+      }
+
+      const role = data.role;
       if (role === "owner") navigate("/owner-dashboard");
       else navigate("/renter-dashboard");
 
@@ -113,7 +126,14 @@ const Login = () => {
         await setDoc(docRef, { email: user.email, role: "renter", createdAt: new Date() });
       }
 
-      const role = docSnap.exists() ? docSnap.data().role : "renter";
+      const data = docSnap.exists() ? docSnap.data() : { role: "renter" };
+      if (data.blocked || data.deleted) {
+        await signOut(auth);
+        setError("This account is blocked or deleted.");
+        return;
+      }
+
+      const role = data.role;
       if (role === "owner") navigate("/owner-dashboard");
       else navigate("/renter-dashboard");
 

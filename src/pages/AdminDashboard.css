@@ -8,7 +8,7 @@
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, sans-serif;
-  background: #f2f8ff;
+  background: #ebeef0;
 }
 
 /* ===============================
@@ -27,7 +27,7 @@ body {
   width: 260px;
   min-width: 260px;
   height: 100vh;
-  background: linear-gradient(180deg, #64b5f6, #1e88e5);
+  background: #0ea5e9;
   position: fixed;
   top: 0;
   left: 0;
@@ -44,22 +44,125 @@ body {
   width: calc(100% - 260px);
   padding: 24px;
   transition: all 0.3s ease;
+  background-color: #eceeef;
 }
 
 /* ===============================
-   SECTIONS
+   PAGE SECTIONS (INDIVIDUAL STYLES)
 ================================ */
-section {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 24px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+
+/* Admin Profile Section */
+.profile-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 500px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
 }
 
-h2 {
+.profile-section h2 {
+  margin-top: 15;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* Properties Section */
+.properties-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.properties-section h2 {
+  margin-top: 10;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* Users Section */
+.users-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 900px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.users-section h2 {
   margin-top: 0;
-  color: #1565c0;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* Rentlist Section */
+.admin-rentlist-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 900px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.admin-rentlist-section h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* Transactions Section */
+.transactions-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.transactions-section h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* Overview Section */
+.overview-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.overview-section h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
 }
 
 /* ===============================
@@ -67,16 +170,17 @@ h2 {
 ================================ */
 .overview-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px;
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #e3f2fd, #ffffff);
-  border-radius: 18px;
-  padding: 20px;
+  background: linear-gradient(135deg, #eff1f1, #e8e9ea);
+  border-radius: 12px;
+  padding: 15px;
   cursor: pointer;
   transition: all 0.2s ease;
+  color: #000000;
 }
 
 .stat-card:hover {
@@ -88,48 +192,181 @@ h2 {
    PROFILE
 ================================ */
 .profile-container {
-  max-width: 500px;
-  margin: auto;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .profile-preview {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
   flex-wrap: wrap;
+  margin-bottom: 15px;
 }
 
 .profile-img {
-  width: 90px;
-  height: 90px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid #90caf9;
+  border: 2px solid #95bfd3;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 150px;
+}
+
+.profile-info p {
+  margin: 5px 0;
+  font-size: 13px;
+  color: #000000;
 }
 
 /* ===============================
    PROPERTIES
 ================================ */
+.properties-container {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
 .properties-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, 1fr); /* Whole Screen: Always 3 columns */
+  gap: 10px;
+}
+
+/* Split Screen Only: 2 columns (600px to 950px) */
+@media (min-width: 600px) and (max-width: 950px) {
+  .properties-list {
+    grid-template-columns: repeat(2, 1fr); /* Split Screen: 2 columns */
+  }
+}
+
+/* Mobile Phone: 1 column (below 600px) */
+@media (max-width: 599px) {
+  .properties-list {
+    grid-template-columns: 1fr; /* Mobile: 1 column */
+  }
 }
 
 .property-card {
-  background: #f8fbff;
+  background: #eff1f3;
   border-radius: 16px;
   overflow: hidden;
+  color: #000000;
 }
 
 .property-image {
   width: 100%;
-  height: 160px;
+  height: 220px;
   object-fit: cover;
 }
 
 .property-main {
-  padding: 14px;
+  padding: 8px;
+}
+
+.property-main p {
+  margin: 2px 0;
+  font-size: 14px;
+}
+
+/* Two-row status + remove layout */
+.status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-row button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.btn-pending { background: #f4b400; }
+.btn-approve { background: #2eaf5d; }
+.btn-reject  { background: #c62828; }
+
+.status-row button:hover { transform: translateY(-1px); }
+
+.status-and-remove {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.status-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.status-badges button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+/* Pending */
+.status-badges button:nth-child(1) {
+  background: #f4b400;
+}
+
+/* Approve */
+.status-badges button:nth-child(2) {
+  background: #2eaf5d;
+}
+
+/* Reject */
+.status-badges button:nth-child(3) {
+  background: #c62828;
+}
+
+.status-badges button:hover {
+  transform: translateY(-1px);
+}
+
+.remove-btn {
+  background: #4b5563;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.remove-btn:hover {
+  background: #374151;
+  transform: translateY(-1px);
 }
 
 /* ===============================
@@ -153,7 +390,7 @@ h2 {
    USERS LIST
 ================================ */
 .users-list {
-  background: linear-gradient(180deg, #e3f2fd, #ffffff);
+  background: linear-gradient(180deg, #e0f7ff, #ffffff);
   border-radius: 16px;
   padding: 14px;
   max-height: 75vh;
@@ -162,13 +399,16 @@ h2 {
 
 .users-list h3 {
   margin: 12px 0 10px;
-  color: #1565c0;
+  color: #0ea5e9;
 }
 
 /* ===============================
    USER ITEM (EMAIL)
 ================================ */
 .user-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: #ffffff;
   margin-bottom: 10px;
   padding: 12px;
@@ -179,12 +419,55 @@ h2 {
 }
 
 .user-item:hover {
-  background: #e3f2fd;
+  background: #e8f5e9;
 }
 
 .user-item.active {
-  background: #bbdefb;
+  background: #c8e6c9;
   font-weight: 600;
+}
+
+/* Avatar + info inside list */
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e0f7ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #0ea5e9;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.user-item-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95em;
+  line-height: 1.1;
+}
+
+.user-item-email {
+  font-size: 0.85em;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===============================
@@ -212,12 +495,12 @@ h2 {
 .panel-header h3 {
   margin: 0;
   font-size: 18px;
-  color: #1565c0;
+  color: #0ea5e9;
 }
 
 /* CLOSE BUTTON */
 .close-btn {
-  background: #e3f2fd;
+  background: #e8f5e9;
   border: none;
   width: 34px;
   height: 34px;
@@ -234,7 +517,7 @@ h2 {
   height: 90px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid #90caf9;
+  border: 3px solid #0ea5e9;
   margin-bottom: 10px;
 }
 
@@ -244,7 +527,7 @@ h2 {
 .property-card.small {
   display: flex;
   gap: 12px;
-  background: #f5faff;
+  background: #e0f7ff;
   padding: 10px;
   border-radius: 12px;
   margin-bottom: 10px;
@@ -270,16 +553,244 @@ h2 {
   flex: 1;
   padding: 10px;
   border-radius: 10px;
-  border: 1px solid #bbdefb;
+  border: 1px solid #c8e6c9;
 }
 
 .message-input button {
-  background: #1e88e5;
-  color: #ffffff;
+  background: #9ACD32;
+  color: #000000;
   border: none;
   border-radius: 10px;
   padding: 10px 16px;
   cursor: pointer;
+}
+
+/* ===============================
+   PANEL PROFILE SECTION
+================================ */
+.panel-profile-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e8f4f8;
+  margin-bottom: 16px;
+}
+
+.panel-profile-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #5fabc0;
+  margin-bottom: 12px;
+}
+
+.panel-profile-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: #e0f7ff;
+  border: 3px solid #5fabc0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0ea5e9;
+  margin-bottom: 12px;
+}
+
+.panel-profile-section p {
+  margin: 4px 0;
+  font-size: 0.95em;
+}
+
+/* ===============================
+   PANEL SECTIONS
+================================ */
+.panel-section {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.panel-section:last-of-type {
+  border-bottom: none;
+}
+
+.panel-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.95em;
+  color: #5fabc0;
+  font-weight: 600;
+}
+
+/* ===============================
+   PANEL PROPERTIES LIST
+================================ */
+.panel-properties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-property-card {
+  display: flex;
+  gap: 10px;
+  background: #f5fafb;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #e0f2f7;
+}
+
+.panel-property-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.panel-property-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 0.85em;
+}
+
+.panel-property-info strong {
+  font-size: 0.9em;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.panel-property-info p {
+  margin: 0;
+  color: #5fabc0;
+  font-weight: 600;
+}
+
+.panel-property-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 600;
+  margin-top: 2px;
+  width: fit-content;
+}
+
+.panel-property-status.pending {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.panel-property-status.approved {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.panel-property-status.rejected {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* ===============================
+   PANEL WITHDRAWALS INFO
+================================ */
+.panel-withdrawals-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.withdrawal-stat {
+  background: #f5fafb;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 4px solid #5fabc0;
+  font-size: 0.9em;
+}
+
+.withdrawal-stat strong {
+  display: block;
+  color: #666;
+  font-size: 0.85em;
+  margin-bottom: 3px;
+}
+
+/* ===============================
+   PANEL RENTALS LIST
+================================ */
+.panel-rentals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-rental-card {
+  display: flex;
+  gap: 10px;
+  background: #f5fafb;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #e0f2f7;
+}
+
+.panel-rental-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.panel-rental-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 0.85em;
+}
+
+.panel-rental-info strong {
+  font-size: 0.9em;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.panel-rental-info p {
+  margin: 0;
+  color: #5fabc0;
+  font-weight: 600;
+}
+
+.panel-rental-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 600;
+  margin-top: 2px;
+  width: fit-content;
+}
+
+.panel-rental-status.pending, .panel-rental-status.to\ deliver, .panel-rental-status.to\ receive {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.panel-rental-status.completed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.panel-rental-status.cancelled, .panel-rental-status.returned {
+  background: #ffebee;
+  color: #c62828;
 }
 
 /* ===============================
@@ -346,7 +857,7 @@ h2 {
     margin: 0;
     font-size: 22px;
     font-weight: 700;
-    color: #1565c0;
+    color: #4CAF50;
   }
 
   /* HAMBURGER BUTTON */
@@ -354,7 +865,7 @@ h2 {
     width: 44px;
     height: 44px;
     border-radius: 12px;
-    background: #1e88e5;
+    background: #4CAF50;
     color: #ffffff;
     border: none;
     font-size: 20px;
@@ -385,12 +896,153 @@ h2 {
 
 .admin-rental-image {
   width: 100%;
-  height: 150px;
+  height: 290px;
   object-fit: cover;
 }
 
 .admin-rental-body {
   padding: 14px;
+}
+
+.admin-rental-details {
+  padding: 12px 14px;
+}
+
+.admin-rental-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-rental-status-btn {
+  margin-left: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  color: #ffffff;
+  background: #2eaf5d;
+}
+
+.admin-rental-status-btn.pending,
+.admin-rental-status-btn.to\ deliver,
+.admin-rental-status-btn.to\ receive,
+.admin-rental-status-btn.completed,
+.admin-rental-status-btn.cancelled,
+.admin-rental-status-btn.returned {
+  background: #2eaf5d;
+}
+
+/* ===============================
+   ADMIN RENTAL MODAL
+================================ */
+.admin-rental-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.admin-rental-modal-content {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  margin: 0 auto;
+  text-align: center;
+}
+
+.rental-modal-title {
+  margin: 4px 0 20px;
+  padding-top: 6px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+.rental-modal-image {
+  width: 250px;
+  max-width: 600px;
+  height: 270px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin: 0 auto 15px;
+  display: block;
+}
+
+.rental-modal-info {
+  margin: 15px 0;
+  text-align: left;
+}
+
+.rental-modal-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #dbdee0;
+  font-size: 14px;
+}
+
+.rental-modal-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #202ada;
+  border-radius: 8px;
+  font-size: 14px;
+  margin: 10px 0;
+}
+
+.rental-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.rental-modal-actions button {
+  padding: 10px 20px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.rental-modal-update-btn {
+  background: #2eaf5d;
+  color: #ffffff;
+}
+
+.rental-modal-update-btn:hover {
+  background: #24944e;
+  transform: translateY(-1px);
+}
+
+.rental-modal-remove-btn {
+  background: #e14c4c;
+  color: #ffffff;
+}
+
+.rental-modal-remove-btn:hover {
+  background: #c63b3b;
+  transform: translateY(-1px);
+}
+
+.rental-modal-close-btn {
+  background: #6c757d;
+  color: #ffffff;
+}
+
+.rental-modal-close-btn:hover {
+  background: #5a646e;
+  transform: translateY(-1px);
 }
 
 /* ===============================
@@ -430,8 +1082,8 @@ h2 {
 
 /* BUTTON */
 .to-pay-btn {
-  background: #1e88e5;
-  color: #fff;
+  background: #9ACD32;
+  color: #000000;
   border: none;
   padding: 8px 14px;
   border-radius: 10px;
@@ -439,7 +1091,7 @@ h2 {
 }
 
 .to-pay-btn:hover {
-  background: #1565c0;
+  background: #7ba82a;
 }
 
 /* ===============================
@@ -454,9 +1106,72 @@ h2 {
    TRANSACTIONS
 ================================ */
 .withdrawal-card {
-  background: linear-gradient(135deg, #e3f2fd, #ffffff);
+  background: linear-gradient(135deg, #e8eef5, #ffffff);
   padding: 16px;
   border-radius: 16px;
+}
+
+.withdrawals-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 600px) and (max-width: 950px) {
+  .withdrawals-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 599px) {
+  .withdrawals-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.withdrawal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.withdrawal-status-toggle {
+  cursor: pointer;
+  color: #0ea5e9;
+}
+
+.withdrawal-delete-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.withdrawal-delete-btn {
+  background: #dc3545;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.withdrawal-delete-btn:hover {
+  background: #b02a37;
+  transform: translateY(-1px);
+}
+
+/* Expanded details style: sky-blue background and compact layout */
+.withdrawal-expanded {
+  background: #e6f4ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.withdrawal-expanded > div {
+  margin: 4px 0;
 }
 
 /* ===============================
@@ -469,7 +1184,7 @@ h2 {
 }
 
 .conversation-list {
-  background: linear-gradient(180deg, #e3f2fd, #ffffff);
+  background: linear-gradient(180deg, #e8f5e9, #ffffff);
   border-radius: 16px;
   padding: 12px;
 }
@@ -509,16 +1224,42 @@ h2 {
     position: fixed;
     top: 12px;
     left: 12px;
-    background: #1e88e5;
+    background: #4CAF50;
     color: #fff;
     border: none;
     padding: 10px 14px;
     border-radius: 10px;
+    z-index: 1200;
+    transition: left 0.3s ease;
+  }
+
+  .sidebar.open ~ .menu-toggle {
+    left: 275px;
   }
 
   .users-container,
   .admin-messages-container {
     grid-template-columns: 1fr;
+  }
+
+  /* Rent list modal spacing on mobile */
+  .admin-rental-modal-content {
+    width: 92%;
+    padding: 16px;
+    margin: 0 12px;
+  }
+
+  .rental-modal-select {
+    margin: 12px 0;
+  }
+
+  .rental-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rental-modal-actions button {
+    width: 100%;
   }
 
   .to-pay-image {
@@ -538,7 +1279,7 @@ h2 {
 }
 
 .support-tickets-section h2 {
-  color: #1e88e5;
+  color: #4CAF50;
   margin: 0 0 20px 0;
   font-size: 24px;
 }
@@ -573,13 +1314,13 @@ h2 {
 }
 
 .ticket-item:hover {
-  background: #e7f3ff !important;
-  border-left: 4px solid #1e88e5 !important;
+  background: #e8f5e9 !important;
+  border-left: 4px solid #4CAF50 !important;
 }
 
 .ticket-item.active {
-  background: #e7f3ff !important;
-  border: 2px solid #1e88e5 !important;
+  background: #e8f5e9 !important;
+  border: 2px solid #4CAF50 !important;
 }
 
 .ticket-details {
@@ -649,7 +1390,7 @@ h2 {
   padding: 15px;
   background: white;
   border-radius: 4px;
-  border-left: 4px solid #1e88e5;
+  border-left: 4px solid #4CAF50;
   max-height: 200px;
   overflow-y: auto;
 }
@@ -796,7 +1537,7 @@ h2 {
 }
 
 .messages-settings-btn {
-  background: #f0f2f5;
+  background: #dbe1e2;
   border: none;
   border-radius: 50%;
   width: 32px;
@@ -811,11 +1552,11 @@ h2 {
 }
 
 .messages-settings-btn:hover {
-  background: #e4e6eb;
+  background: #0c45c0;
 }
 
 .messages-search-box {
-  background: #f0f2f5;
+  background: #dcefff;
   border-radius: 20px;
   padding: 10px 16px;
   display: flex;
@@ -833,14 +1574,15 @@ h2 {
 
 .conversation-list {
   width: 320px;
-  border-right: 1px solid #e5e5e5;
+  border-right: 1px solid #6393ca;
   overflow-y: auto;
-  background: #fff;
+  background: linear-gradient(180deg, #e6f4ff 0%, #ffffff 100%);
 }
 
 .conversation-list-header {
   padding: 16px;
   border-bottom: 1px solid #e5e5e5;
+  background: #cde7ff;
 }
 
 .conversation-item {
@@ -861,8 +1603,8 @@ h2 {
 }
 
 .conversation-item.active {
-  background: #e7f3ff;
-  border-left: 3px solid #0084ff;
+  background: #e8f5e9;
+  border-left: 3px solid #4CAF50;
   padding-left: 13px;
 }
 
@@ -878,6 +1620,13 @@ h2 {
   font-size: 18px;
   font-weight: bold;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.conversation-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .conversation-preview {
@@ -897,6 +1646,24 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Highlight unread last message preview in red */
+.conversation-last-msg.unread {
+  color: #e53935;
+  font-weight: 600;
+}
+
+.conversation-badge {
+  background: #e53935;
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 8px;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 /* ===============================
@@ -975,7 +1742,7 @@ h2 {
 }
 
 .chat-message-bubble.admin {
-  background: #0084ff;
+  background: #4CAF50;
   color: white;
 }
 
@@ -1116,4 +1883,260 @@ h2 {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* ===============================
+   PROFILE ACTIONS
+================================ */
+.profile-form {
+  max-width: 350px;
+  margin: 20px auto 0;
+}
+
+.profile-form label {
+  display: block;
+  margin: 10px 0 4px;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.profile-form input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.profile-actions button {
+  padding: 10px 20px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+/* Edit Profile button - blue */
+.profile-actions button:first-child:not(:disabled) {
+  background: #2196F3;
+  color: white;
+}
+
+.profile-actions button:first-child:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+/* Cancel button - light gray */
+.profile-actions button:nth-child(2) {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.profile-actions button:nth-child(2):hover {
+  background: #d0d0d0;
+}
+
+/* View Blocklist button - gray */
+.profile-actions button:nth-child(3),
+.profile-actions button:last-child {
+  background: #9e9e9e;
+  color: white;
+}
+
+.profile-actions button:nth-child(3):hover,
+.profile-actions button:last-child:hover {
+  background: #757575;
+}
+
+/* Save button - green (when editing) */
+.profile-form .profile-actions button:first-child:not(:disabled) {
+  background: #4CAF50;
+  color: white;
+}
+
+.profile-form .profile-actions button:first-child:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.profile-form .profile-actions button:first-child:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+/* Blocked user item container - add spacing */
+.blocked-user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+/* Unblock button in blocklist modal - green, smaller */
+.blocked-user-item button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.blocked-user-item button:hover {
+  background: #45a049;
+}
+
+/* Cancel button in blocklist modal - light gray */
+.blocklist-actions button {
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.blocklist-actions button:hover {
+  background: #d0d0d0;
+}
+
+/* ===============================
+   MESSAGES PAGE CONTAINER
+================================ */
+.messages-page-container {
+  display: flex;
+  height: calc(100vh - 120px);
+  gap: 0;
+  background: #fff;
+}
+
+/* Medium screens / split-view: tighten search box and list width */
+@media (max-width: 1100px) {
+  .messages-title { font-size: 26px; }
+  .messages-search-box { padding: 6px 10px; gap: 6px; }
+  .messages-search-input { font-size: 13px; }
+  .conversation-list { width: 260px; }
+}
+
+/* Mobile messenger-like layout */
+@media (max-width: 768px) {
+  .messages-page-container {
+    flex-direction: column;
+    height: calc(100vh - 80px);
+  }
+
+  .conversation-list {
+    width: 100%;
+    height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .chat-window-container {
+    width: 100%;
+    height: 55vh;
+  }
+
+  .messages-page-container.chat-open .conversation-list {
+    display: none;
+  }
+
+  .messages-page-container.chat-open .chat-window-container {
+    height: calc(100vh - 120px);
+  }
+
+  .messages-header {
+    margin-bottom: 12px;
+  }
+
+  .messages-title {
+    font-size: 22px;
+  }
+
+  .messages-search-box {
+    padding: 6px 10px;
+  }
+
+  /* Stack blocklist items vertically on mobile */
+  .blocked-user-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .blocked-user-item button {
+    align-self: flex-start;
+    width: auto;
+    min-width: 100px;
+  }
+}
+
+/* ===============================
+   SETTINGS POSITION
+================================ */
+.settings-position {
+  position: relative;
+}
+
+/* ===============================
+   CONVERSATION MESSAGE PARAGRAPH
+================================ */
+.conversation-message-paragraph {
+  margin: 0 0 4px 0;
+}
+
+/* ===============================
+   NO MESSAGES TEXT
+================================ */
+.no-messages-text {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+}
+
+/* ===============================
+   TOAST NOTIFICATION
+================================ */
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 16px 20px;
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 9999;
+  animation: slideIn 0.3s ease-out;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.toast-notification.success {
+  background-color: #4CAF50;
+}
+
+.toast-notification.error {
+  background-color: #f44336;
+}
+
+.toast-notification.warning {
+  background-color: #ff9800;
 }

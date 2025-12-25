@@ -47,6 +47,8 @@ const AdminDashboard = ({ onLogout }) => {
   const [messages, setMessages] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [replyText, setReplyText] = useState({});
+  const [messageSearch, setMessageSearch] = useState("");
+  const [lastReadByOwner, setLastReadByOwner] = useState({}); // per-owner last read timestamp
   const [showMessageSettings, setShowMessageSettings] = useState(false);
   const [showTransactionSettings, setShowTransactionSettings] = useState(false);
 
@@ -72,6 +74,29 @@ const AdminDashboard = ({ onLogout }) => {
   /* ---------------- toast notifications ---------------- */
   const [toastMessage, setToastMessage] = useState("");
 
+  // Backfill missing displayName/photoURL in users collection using owners/renters docs
+  const backfillUsersProfileData = async (arr) => {
+    const toFix = arr.filter((u) => !u.displayName || !u.photoURL);
+    await Promise.all(
+      toFix.map(async (u) => {
+        const sourceCol = u.role === "owner" ? "owners" : "renters";
+        try {
+          const snap = await getDoc(doc(db, sourceCol, u.uid));
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const update = {};
+          if (!u.displayName && data.displayName) update.displayName = data.displayName;
+          if (!u.photoURL && data.photoURL) update.photoURL = data.photoURL;
+          if (Object.keys(update).length === 0) return;
+          update.updatedAt = serverTimestamp();
+          await setDoc(doc(db, "users", u.uid), update, { merge: true });
+        } catch (e) {
+          console.warn("backfillUsersProfileData failed for", u.uid, e);
+        }
+      })
+    );
+  };
+
   /* ---------------- initial admin ---------------- */
   useEffect(() => {
     const u = auth.currentUser;
@@ -91,6 +116,10 @@ const AdminDashboard = ({ onLogout }) => {
       setUsersList(list);
       setOwners(list.filter((u) => u.role === "owner"));
       setRenters(list.filter((u) => u.role === "renter"));
+      setBlockedUsers(list.filter((u) => u.blocked || u.deleted).map((u) => u.uid));
+
+      // Auto-fix missing name/photo using owner/renter docs so admin sees latest profile
+      backfillUsersProfileData(list);
     });
 
     const unsubProps = onSnapshot(collection(db, "properties"), (snap) => {
@@ -416,6 +445,29 @@ const [selectedOwner, setSelectedOwner] = useState(null);
 const [adminReplyText, setAdminReplyText] = useState({});
 const adminEmail = adminUser?.email;
 
+  // Load persisted last-read map for unread badges (per owner)
+  useEffect(() => {
+    if (!adminEmail) return;
+    try {
+      const stored = localStorage.getItem(`admin-last-read-${adminEmail}`);
+      if (stored) {
+        setLastReadByOwner(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.warn("Failed to load lastReadByOwner", e);
+    }
+  }, [adminEmail]);
+
+  // Persist last-read map when it changes
+  useEffect(() => {
+    if (!adminEmail) return;
+    try {
+      localStorage.setItem(`admin-last-read-${adminEmail}`, JSON.stringify(lastReadByOwner));
+    } catch (e) {
+      console.warn("Failed to persist lastReadByOwner", e);
+    }
+  }, [adminEmail, lastReadByOwner]);
+
 // Listen for admin-owner messages only
 useEffect(() => {
   if (!adminEmail) return;
@@ -494,6 +546,21 @@ const handleAdminDeleteConversation = async (ownerEmail) => {
 
   setSelectedOwner(null);
 };
+
+// Mark a conversation as read up to its latest message
+const markChatRead = (ownerEmail) => {
+  if (!ownerEmail) return;
+  const latestTs = messages
+    .filter(m => (m.sender === ownerEmail && m.receiver === adminEmail) || (m.receiver === ownerEmail && m.sender === adminEmail))
+    .reduce((max, m) => Math.max(max, m.createdAt?.seconds || 0), 0);
+  setLastReadByOwner((prev) => ({ ...prev, [ownerEmail]: latestTs }));
+};
+
+// Auto-mark selected chat as read when messages change
+useEffect(() => {
+  if (!selectedChat) return;
+  markChatRead(selectedChat);
+}, [selectedChat, messages]);
 
 // Send message from Users panel to owner
 const handleSendMessage = async (ownerEmail) => {
@@ -597,6 +664,16 @@ const rejectWithdrawal = async (withdrawal) => {
   }
 };
 
+// Delete a single withdrawal (no toast, removes inline)
+const handleDeleteWithdrawal = async (withdrawal) => {
+  try {
+    await deleteDoc(doc(db, "withdrawals", withdrawal.id));
+    setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
+  } catch (err) {
+    console.error("Failed to delete withdrawal", err);
+  }
+};
+
 // ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
 useEffect(() => {
   if (window.innerWidth <= 768) {
@@ -612,17 +689,63 @@ const [showOwnersList, setShowOwnersList] = useState(false);
 const [showRentersList, setShowRentersList] = useState(false);
 
 // Block/Unblock function
-const handleBlockUser = (uid) => {
-  setBlockedUsers(prev => {
-    if (prev.includes(uid)) {
-      return prev.filter(id => id !== uid); // Unblock
-    } else {
-      return [...prev, uid]; // Block
+  const handleBlockUser = async (user) => {
+    if (!user?.uid) return;
+    const isBlocked = !!user.blocked;
+    try {
+      const updates = {
+        blocked: !isBlocked,
+        blockedAt: !isBlocked ? serverTimestamp() : null,
+      };
+
+      await Promise.all([
+        setDoc(doc(db, "users", user.uid), updates, { merge: true }),
+        setDoc(doc(db, user.role === "owner" ? "owners" : "renters", user.uid), updates, { merge: true }).catch(() => {}),
+      ]);
+
+      setBlockedUsers((prev) => {
+        if (isBlocked) return prev.filter((id) => id !== user.uid);
+        return Array.from(new Set([...prev, user.uid]));
+      });
+
+      setSelectedUser({ ...user, blocked: !isBlocked });
+    } catch (err) {
+      console.error("Failed to toggle block", err);
+      setToastMessage("❌ Failed to update block status");
+      setTimeout(() => setToastMessage(""), 3000);
     }
-  });
-};
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!user?.uid) return;
+    if (!window.confirm(`Delete account for ${user.email}? This will block login.`)) return;
+    try {
+      const updates = {
+        deleted: true,
+        blocked: true,
+        deletedAt: serverTimestamp(),
+      };
+
+      await Promise.all([
+        setDoc(doc(db, "users", user.uid), updates, { merge: true }),
+        setDoc(doc(db, user.role === "owner" ? "owners" : "renters", user.uid), updates, { merge: true }).catch(() => {}),
+      ]);
+
+      setBlockedUsers((prev) => Array.from(new Set([...prev, user.uid])));
+      setSelectedUser(null);
+      setToastMessage("✅ Account marked as deleted");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error("Failed to delete user", err);
+      setToastMessage("❌ Failed to delete user");
+      setTimeout(() => setToastMessage(""), 3000);
+    }
+  };
 
   /* ---------------- render ---------------- */
+  const displayedOwners = owners.filter((u) => !u.blocked && !u.deleted);
+  const displayedRenters = renters.filter((u) => !u.blocked && !u.deleted);
+
   return (
   <div className="dashboard-container admin-dashboard">
   {/* MENU TOGGLE BUTTON */}
@@ -630,7 +753,7 @@ const handleBlockUser = (uid) => {
     className="menu-toggle"
     onClick={() => setSidebarOpen(!sidebarOpen)}
   >
-    ☰
+    {sidebarOpen ? '✖' : '☰'}
   </button>
 
   {/* SIDEBAR OVERLAY */}
@@ -671,7 +794,7 @@ const handleBlockUser = (uid) => {
 
         {/* ---------------- ACTION BUTTONS ---------------- */}
         {!isEditing ? (
-          <div style={{ marginTop: 12 }}>
+          <div className="profile-actions">
             <button onClick={() => setIsEditing(true)}>Edit Profile</button>
             <button onClick={() => setActiveBlocklist(true)}>View Blocklist</button>
           </div>
@@ -689,7 +812,7 @@ const handleBlockUser = (uid) => {
             <label>GCash Phone Number</label>
             <input type="text" value={gcashPhoneNumber} onChange={(e) => setGcashPhoneNumber(e.target.value)} />
 
-            <div style={{ marginTop: 12 }}>
+            <div className="profile-actions">
               <button onClick={handleSaveProfile} disabled={loading}>
                 {loading ? "Saving..." : "Save"}
               </button>
@@ -723,11 +846,14 @@ const handleBlockUser = (uid) => {
                   return (
                     <div key={uid} className="blocked-user-item">
                       <span>{user.email} ({user.role})</span>
-                      <button onClick={() => handleBlockUser(uid)}>Unblock</button>
+                      <button onClick={() => handleBlockUser(user)}>Unblock</button>
                     </div>
                   );
                 })
               )}
+              <div className="blocklist-actions">
+                <button onClick={() => setActiveBlocklist(false)}>Cancel</button>
+              </div>
             </div>
           </div>
         )}
@@ -808,41 +934,47 @@ const handleBlockUser = (uid) => {
                         <p>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</p>
                         <p>Status: {p.status || "N/A"}</p>
 
-                        <div className="status-badges">
-                          <button onClick={() => updatePropertyStatus(p.id, "pending")}>Pending</button>
-                          <button onClick={() => updatePropertyStatus(p.id, "approved")}>Approve</button>
-                          <button onClick={() => updatePropertyStatus(p.id, "rejected")}>Reject</button>
-                        </div>
+                        <div className="status-and-remove">
+                          <div className="status-grid">
+                            <div className="status-row">
+                              <button className="btn-pending" onClick={() => updatePropertyStatus(p.id, "pending")}>Pending</button>
+                              <button className="btn-approve" onClick={() => updatePropertyStatus(p.id, "approved")}>Approve</button>
+                            </div>
 
-                        <button
-                          className="remove-btn"
-                          onClick={async () => {
-                            try {
-                              // If property is approved, just mark as removed instead of deleting
-                              // so renters can still see it in their browse
-                              if (p.status === "approved") {
-                                await updateDoc(doc(db, "properties", p.id), {
-                                  removedByAdmin: true,
-                                  removedAt: serverTimestamp()
-                                });
-                              } else {
-                                // If not approved, completely delete it
-                                await deleteDoc(doc(db, "properties", p.id));
-                              }
-                              
-                              setProperties((prev) => prev.filter((prop) => prop.id !== p.id));
-                              setFilteredProperties((prev) => prev.filter((prop) => prop.id !== p.id));
-                              setToastMessage("✅ Property removed successfully");
-                              setTimeout(() => setToastMessage(""), 2500);
-                            } catch (err) {
-                              console.error(err);
-                              setToastMessage("❌ Failed to remove property");
-                              setTimeout(() => setToastMessage(""), 3500);
-                            }
-                          }}
-                        >
-                          Remove
-                        </button>
+                            <div className="status-row">
+                              <button className="btn-reject" onClick={() => updatePropertyStatus(p.id, "rejected")}>Reject</button>
+                              <button
+                                className="remove-btn"
+                                onClick={async () => {
+                                  try {
+                                    // If property is approved, just mark as removed instead of deleting
+                                    // so renters can still see it in their browse
+                                    if (p.status === "approved") {
+                                      await updateDoc(doc(db, "properties", p.id), {
+                                        removedByAdmin: true,
+                                        removedAt: serverTimestamp()
+                                      });
+                                    } else {
+                                      // If not approved, completely delete it
+                                      await deleteDoc(doc(db, "properties", p.id));
+                                    }
+                                  
+                                    setProperties((prev) => prev.filter((prop) => prop.id !== p.id));
+                                    setFilteredProperties((prev) => prev.filter((prop) => prop.id !== p.id));
+                                    setToastMessage("✅ Property removed successfully");
+                                    setTimeout(() => setToastMessage(""), 2500);
+                                  } catch (err) {
+                                    console.error(err);
+                                    setToastMessage("❌ Failed to remove property");
+                                    setTimeout(() => setToastMessage(""), 3500);
+                                  }
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -858,7 +990,7 @@ const handleBlockUser = (uid) => {
     <div className="users-container">
       <div className="users-list">
         <div className="users-list-header">
-          <h3>Owners ({owners.length})</h3>
+          <h3>Owners ({displayedOwners.length})</h3>
           <button 
             onClick={() => setShowOwnersList(!showOwnersList)}
             className="users-list-toggle-btn"
@@ -866,18 +998,28 @@ const handleBlockUser = (uid) => {
             {showOwnersList ? "Hide" : "Show"}
           </button>
         </div>
-        {showOwnersList && owners.map(o => (
+        {showOwnersList && displayedOwners.map(o => (
           <div
             key={o.uid}
             className={`user-item ${selectedUser?.uid === o.uid ? "active" : ""}`}
             onClick={() => setSelectedUser(o)}
           >
-            <strong>{o.email}</strong>
+            <div className="user-avatar">
+              {o.photoURL ? (
+                <img src={o.photoURL} alt={o.displayName || o.email} />
+              ) : (
+                <span>{(o.displayName || o.email)?.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="user-item-info">
+              <span className="user-item-name">{o.displayName || "No name"}</span>
+              <span className="user-item-email">{o.email}</span>
+            </div>
           </div>
         ))}
 
         <div className="users-list-renters-header">
-          <h3>Renters ({renters.length})</h3>
+          <h3>Renters ({displayedRenters.length})</h3>
           <button 
             onClick={() => setShowRentersList(!showRentersList)}
             className="users-list-toggle-btn"
@@ -885,13 +1027,23 @@ const handleBlockUser = (uid) => {
             {showRentersList ? "Hide" : "Show"}
           </button>
         </div>
-        {showRentersList && renters.map(r => (
+        {showRentersList && displayedRenters.map(r => (
           <div
             key={r.uid}
             className={`user-item ${selectedUser?.uid === r.uid ? "active" : ""}`}
             onClick={() => setSelectedUser(r)}
           >
-            <strong>{r.email}</strong>
+            <div className="user-avatar">
+              {r.photoURL ? (
+                <img src={r.photoURL} alt={r.displayName || r.email} />
+              ) : (
+                <span>{(r.displayName || r.email)?.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="user-item-info">
+              <span className="user-item-name">{r.displayName || "No name"}</span>
+              <span className="user-item-email">{r.email}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -900,31 +1052,155 @@ const handleBlockUser = (uid) => {
         <div className="user-details-panel">
           <div className="panel-header">
             <h3>{selectedUser.email}</h3>
-            <button onClick={() => setShowDetails(prev => !prev)}>
-              {showDetails ? "Hide" : "Show"}
-            </button>
-            <button onClick={() => handleBlockUser(selectedUser.uid)}>
+            <button onClick={() => handleBlockUser(selectedUser)}>
               {blockedUsers.includes(selectedUser.uid) ? "Unblock" : "Block"}
             </button>
+            <button onClick={() => handleDeleteUser(selectedUser)}>🗑 Delete</button>
             <button onClick={() => setSelectedUser(null)}>✖</button>
           </div>
 
-          {showDetails && (
-            <div className="user-details-content">
+          <div className="user-details-content">
+            {/* User Profile Info */}
+            <div className="panel-profile-section">
+              {selectedUser.photoURL ? (
+                <img src={selectedUser.photoURL} alt="Profile" className="panel-profile-img" />
+              ) : (
+                <div className="panel-profile-avatar">
+                  {(selectedUser.displayName || selectedUser.email)?.charAt(0).toUpperCase()}
+                </div>
+              )}
               <p><strong>Email:</strong> {selectedUser.email}</p>
+              {selectedUser.displayName && (
+                <p><strong>Name:</strong> {selectedUser.displayName}</p>
+              )}
+              <p><strong>Role:</strong> {selectedUser.role}</p>
+              
+              {/* Additional Owner Profile Details */}
+              {selectedUser.role === "owner" && (
+                <>
+                  {selectedUser.phoneNumber && (
+                    <p><strong>Phone:</strong> {selectedUser.phoneNumber}</p>
+                  )}
+                  {selectedUser.address && (
+                    <p><strong>Address:</strong> {selectedUser.address}</p>
+                  )}
+                  {selectedUser.createdAt && (
+                    <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleDateString() : formatDate(selectedUser.createdAt)}</p>
+                  )}
+                </>
+              )}
 
-              <div className="message-input">
-                <input
-                  type="text"
-                  placeholder={`Type message to ${selectedUser.role}...`}
-                  value={replyText[selectedUser.email] || ""}
-                  onChange={e => setReplyText(prev => ({ ...prev, [selectedUser.email]: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && handleSendMessage(selectedUser.email)}
-                />
-                <button onClick={() => handleSendMessage(selectedUser.email)}>Send</button>
-              </div>
+              {/* Additional Renter Profile Details */}
+              {selectedUser.role === "renter" && (
+                <>
+                  {selectedUser.phoneNumber && (
+                    <p><strong>Phone:</strong> {selectedUser.phoneNumber}</p>
+                  )}
+                  {selectedUser.address && (
+                    <p><strong>Address:</strong> {selectedUser.address}</p>
+                  )}
+                  {selectedUser.createdAt && (
+                    <p><strong>Joined:</strong> {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleDateString() : formatDate(selectedUser.createdAt)}</p>
+                  )}
+                </>
+              )}
             </div>
-          )}
+
+            {/* OWNER SECTION */}
+            {selectedUser.role === "owner" && (
+              <>
+                {/* Owner's Properties */}
+                <div className="panel-section">
+                  <h4>Properties ({properties.filter(p => p.ownerEmail === selectedUser.email).length})</h4>
+                  {properties.filter(p => p.ownerEmail === selectedUser.email).length === 0 ? (
+                    <p style={{fontSize: "0.9em", color: "#888"}}>No properties listed</p>
+                  ) : (
+                    <div className="panel-properties-list">
+                      {properties.filter(p => p.ownerEmail === selectedUser.email).map(prop => (
+                        <div key={prop.id} className="panel-property-card">
+                          {prop.imageUrl && (
+                            <img src={prop.imageUrl} alt={prop.name} className="panel-property-img" />
+                          )}
+                          <div className="panel-property-info">
+                            <strong>{prop.name}</strong>
+                            <p>₱{prop.price || "N/A"}</p>
+                            <span className={`panel-property-status ${(prop.status || "").toLowerCase()}`}>
+                              {prop.status || "N/A"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Owner's Total Withdrawals */}
+                <div className="panel-section">
+                  <h4>Withdrawals</h4>
+                  {withdrawals.filter(w => w.ownerEmail === selectedUser.email).length === 0 ? (
+                    <p style={{fontSize: "0.9em", color: "#888"}}>No withdrawals</p>
+                  ) : (
+                    <div className="panel-withdrawals-info">
+                      <div className="withdrawal-stat">
+                        <strong>Total Withdrawn:</strong> ₱{withdrawals
+                          .filter(w => w.ownerEmail === selectedUser.email && w.status === "approved")
+                          .reduce((sum, w) => sum + Number(w.amount || 0), 0)
+                          .toFixed(2)}
+                      </div>
+                      <div className="withdrawal-stat">
+                        <strong>Pending:</strong> ₱{withdrawals
+                          .filter(w => w.ownerEmail === selectedUser.email && w.status === "pending")
+                          .reduce((sum, w) => sum + Number(w.amount || 0), 0)
+                          .toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* RENTER SECTION */}
+            {selectedUser.role === "renter" && (
+              <>
+                {/* Renter's Rentals */}
+                <div className="panel-section">
+                  <h4>Rentals ({rentals.filter(r => r.renterEmail === selectedUser.email).length})</h4>
+                  {rentals.filter(r => r.renterEmail === selectedUser.email).length === 0 ? (
+                    <p style={{fontSize: "0.9em", color: "#888"}}>No rentals yet</p>
+                  ) : (
+                    <div className="panel-rentals-list">
+                      {rentals.filter(r => r.renterEmail === selectedUser.email).map(rental => (
+                        <div key={rental.id} className="panel-rental-card">
+                          {rental.propertyImage && (
+                            <img src={rental.propertyImage} alt={rental.propertyName} className="panel-rental-img" />
+                          )}
+                          <div className="panel-rental-info">
+                            <strong>{rental.propertyName}</strong>
+                            <p>₱{rental.totalAmount || rental.price || "N/A"}</p>
+                            <span className={`panel-rental-status ${(rental.status || "").toLowerCase()}`}>
+                              {rental.status || "N/A"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Message Input */}
+            <div className="message-input">
+              <input
+                type="text"
+                placeholder={`Type message to ${selectedUser.role}...`}
+                value={replyText[selectedUser.email] || ""}
+                onChange={e => setReplyText(prev => ({ ...prev, [selectedUser.email]: e.target.value }))}
+                onKeyDown={e => e.key === "Enter" && handleSendMessage(selectedUser.email)}
+              />
+              <button onClick={() => handleSendMessage(selectedUser.email)}>Send</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -943,7 +1219,7 @@ const handleBlockUser = (uid) => {
               rentalsByRenter.map((group) => (
                 <div key={group.renter.uid || group.renter.email} className="admin-renter-group">
                   <div className="admin-renter-total">
-                    <strong>Total Rentals:</strong> ₱{group.total}
+                    <strong>Total Rentals:</strong> {group.items.length}
                   </div>
 
                   <div className="admin-renter-items">
@@ -1047,32 +1323,12 @@ const handleBlockUser = (uid) => {
           <section className="transactions-section">
             <div className="transactions-header">
               <h2 className="transactions-title">Owner Withdrawals</h2>
-              <div className="transactions-settings-wrapper">
-                <button
-                  onClick={() => setShowTransactionSettings(!showTransactionSettings)}
-                  className="transactions-settings-btn"
-                >
-                  ⚙️
-                </button>
-                {showTransactionSettings && (
-                  <div className="settings-dropdown">
-                    <button
-                      onClick={() => {
-                        handleDeleteAllTransactions();
-                        setShowTransactionSettings(false);
-                      }}
-                      className="settings-dropdown-btn"
-                    >
-                      🗑️ Delete All
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
             {withdrawals.length === 0 ? (
               <p>No withdrawals yet.</p>
             ) : (
-              withdrawals.map((w) => (
+              <div className="withdrawals-list">
+              {withdrawals.map((w) => (
                 <div key={w.id} className="withdrawal-card">
                   <div className="withdrawal-owner">
                     <strong>Owner:</strong> {w.ownerEmail || "N/A"}
@@ -1087,6 +1343,15 @@ const handleBlockUser = (uid) => {
                     <span className="withdrawal-status-toggle" onClick={() => setExpandedWithdrawal(expandedWithdrawal === w.id ? null : w.id)}>
                       {w.status || "pending"}
                     </span>
+                  </div>
+
+                  <div className="withdrawal-delete-row">
+                    <button
+                      className="withdrawal-delete-btn"
+                      onClick={() => handleDeleteWithdrawal(w)}
+                    >
+                      Delete
+                    </button>
                   </div>
 
                   {expandedWithdrawal === w.id && (
@@ -1117,19 +1382,20 @@ const handleBlockUser = (uid) => {
                     </div>
                   )}
                 </div>
-              ))
+              ))}
+              </div>
             )}
           </section>
         )}
 
       {activePage === "messages" && (
-  <div style={{ display: "flex", height: "calc(100vh - 120px)", gap: "0", background: "#fff" }}>
+  <div className={`messages-page-container ${selectedChat ? "chat-open" : ""}`}>
     {/* Conversation List - Facebook Style */}
     <div className="conversation-list">
       <div className="conversation-list-header">
         <div className="messages-header">
           <h2 className="messages-title">Messages</h2>
-          <div style={{ position: "relative" }}>
+          <div className="settings-position">
             <button
               onClick={() => setShowMessageSettings(!showMessageSettings)}
               className="messages-settings-btn"
@@ -1155,8 +1421,10 @@ const handleBlockUser = (uid) => {
           <span>🔍</span>
           <input
             type="text"
-            placeholder="Search Messenger"
+            placeholder="Search email"
             className="messages-search-input"
+            value={messageSearch}
+            onChange={(e) => setMessageSearch(e.target.value)}
           />
         </div>
       </div>
@@ -1165,6 +1433,7 @@ const handleBlockUser = (uid) => {
         .filter(m => m.senderRole === "admin" || m.receiverRole === "admin")
         .flatMap(m => m.senderRole === "admin" ? [m.receiver] : [m.sender])
       ))
+        .filter(email => (email || "").toLowerCase().includes(messageSearch.toLowerCase()))
         .sort((a, b) => {
           const lastA = messages.filter(m => (m.sender === a && m.receiver === adminEmail) || (m.receiver === a && m.sender === adminEmail)).pop();
           const lastB = messages.filter(m => (m.sender === b && m.receiver === adminEmail) || (m.receiver === b && m.sender === adminEmail)).pop();
@@ -1174,28 +1443,45 @@ const handleBlockUser = (uid) => {
           const lastMsg = messages
             .filter(m => (m.sender === ownerEmail && m.receiver === adminEmail) || (m.receiver === ownerEmail && m.sender === adminEmail))
             .pop();
+          const ownerUser = owners.find(o => o.email === ownerEmail);
+          const lastReadTs = lastReadByOwner[ownerEmail] || 0;
+          const unreadCount = messages.filter(m => (
+            m.sender === ownerEmail &&
+            m.receiver === adminEmail &&
+            (m.createdAt?.seconds || 0) > lastReadTs
+          )).length;
           return (
             <div
               key={ownerEmail}
-              onClick={() => setSelectedChat(ownerEmail)}
+              onClick={() => {
+                setSelectedChat(ownerEmail);
+                markChatRead(ownerEmail);
+              }}
               className={`conversation-item ${selectedChat === ownerEmail ? "active" : ""}`}
               onMouseEnter={e => !selectedChat === ownerEmail && (e.currentTarget.style.background = "#f0f2f5")}
               onMouseLeave={e => !selectedChat === ownerEmail && (e.currentTarget.style.background = "#fff")}
             >
               <div className="conversation-avatar">
-                {ownerEmail.charAt(0).toUpperCase()}
+                {ownerUser?.photoURL ? (
+                  <img src={ownerUser.photoURL} alt={ownerUser.displayName || ownerEmail} />
+                ) : (
+                  ownerEmail.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="conversation-preview">
                 <div className="conversation-email">{ownerEmail}</div>
-                <div className="conversation-last-msg">
+                <div className={`conversation-last-msg ${unreadCount > 0 ? "unread" : ""}`}>
                   {lastMsg?.text || "No messages"}
                 </div>
               </div>
+              {unreadCount > 0 && (
+                <span className="conversation-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+              )}
             </div>
           );
         })
       }
-      {messages.length === 0 && <p style={{ padding: "20px", textAlign: "center", color: "#999" }}>No messages yet.</p>}
+      {messages.length === 0 && <p className="no-messages-text">No messages yet.</p>}
     </div>
 
     {/* Chat Window - Facebook Style */}
@@ -1222,7 +1508,7 @@ const handleBlockUser = (uid) => {
                   className={`chat-message-wrapper ${m.sender === adminEmail ? "admin" : "other"}`}
                 >
                   <div className={`chat-message-bubble ${m.sender === adminEmail ? "admin" : "other"}`}>
-                    <p style={{ margin: "0 0 4px 0" }}>{m.text}</p>
+                    <p className="conversation-message-paragraph">{m.text}</p>
                     <small className="chat-message-time">{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
                   </div>
                 </div>
@@ -1257,20 +1543,10 @@ const handleBlockUser = (uid) => {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: "fixed",
-          top: "20px",
-          right: "20px",
-          padding: "16px 20px",
-          backgroundColor: toastMessage.startsWith("✅") ? "#4CAF50" : toastMessage.startsWith("❌") ? "#f44336" : "#ff9800",
-          color: "#fff",
-          borderRadius: "8px",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          zIndex: 9999,
-          animation: "slideIn 0.3s ease-out",
-          fontWeight: "500",
-          fontSize: "14px"
-        }}>
+        <div className={`toast-notification ${
+          toastMessage.startsWith("✅") ? "success" : 
+          toastMessage.startsWith("❌") ? "error" : "warning"
+        }`}>
           {toastMessage}
         </div>
       )}

@@ -126,17 +126,17 @@ const filteredRentals = myRentals.filter((r) => r.status === selectedTab);
       setDisplayName(data.displayName || "");
       setPhotoPreview(data.photoURL || "/default-profile.png");
     } else {
-      // Create initial document if it doesn't exist
-      setDoc(
-        userDocRef,
-        {
-          displayName: auth.currentUser.displayName || "",
-          email: auth.currentUser.email,
-          createdAt: serverTimestamp(),
-          photoURL: auth.currentUser.photoURL || "/default-profile.png",
-        },
-        { merge: true }
-      );
+      // Create initial document if it doesn't exist and mirror to shared users collection
+      const baseProfile = {
+        displayName: auth.currentUser.displayName || "",
+        email: auth.currentUser.email,
+        createdAt: serverTimestamp(),
+        photoURL: auth.currentUser.photoURL || "/default-profile.png",
+        role: "renter",
+      };
+
+      setDoc(userDocRef, baseProfile, { merge: true });
+      setDoc(doc(db, "users", auth.currentUser.uid), baseProfile, { merge: true });
     }
   });
 
@@ -241,16 +241,30 @@ const handleSaveProfile = async () => {
         displayName,
         photoURL,
         email: user.email,
+        role: "renter",
         createdAt: serverTimestamp(),
       });
     } else {
       // Update document without overwriting createdAt
       await setDoc(
         userDocRef,
-        { displayName, photoURL, email: user.email },
+        { displayName, photoURL, email: user.email, role: "renter" },
         { merge: true }
       );
     }
+
+    // Mirror into shared users collection for admin visibility
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        displayName,
+        photoURL,
+        email: user.email,
+        role: "renter",
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
     setUser({ ...user, displayName, photoURL });
     setIsEditing(false);
     setPhotoFile(null);
@@ -1165,9 +1179,9 @@ useEffect(() => {
 <div className="dashboard-container renter-dashboard">
  <button
   className="menu-toggle"
-  onClick={() => setSidebarOpen(true)}
+  onClick={() => setSidebarOpen(!sidebarOpen)}
 >
-  ☰
+  {sidebarOpen ? '✖' : '☰'}
 </button>
 
 
@@ -1430,7 +1444,7 @@ useEffect(() => {
             <img
               src={URL.createObjectURL(commentImages[post.id])}
               alt="Preview"
-              style={{ width: 100, marginTop: 4 }}
+              className="comment-image-preview"
             />
           )}
 
@@ -1460,7 +1474,7 @@ useEffect(() => {
                 <>
                   <p><strong>{c.userName}:</strong> {c.comment}</p>
                   {c.imageUrl && (
-                    <img src={c.imageUrl} alt="Comment proof" style={{ width: 120, marginTop: 4 }} />
+                    <img src={c.imageUrl} alt="Comment proof" className="comment-attachment-image" />
                   )}
 
                   {/* Owner actions */}
@@ -1598,7 +1612,7 @@ useEffect(() => {
           readOnly
         />
 
-        <div id="rental-map" style={{ height: 300, margin: "10px 0", border: "1px solid #ccc" }} />
+        <div id="rental-map" />
 
         <label>Postal Code</label>
         <input
@@ -1633,7 +1647,7 @@ useEffect(() => {
             />
 
             {rentalForm.screenshot && (
-              <div style={{ marginTop: 4 }}>
+              <div className="gcash-screenshot-container">
                 <p>Uploaded ✅</p>
                 <img
                   src={rentalForm.screenshot instanceof File
@@ -1641,7 +1655,7 @@ useEffect(() => {
                     : rentalForm.screenshot
                   }
                   alt="GCash Screenshot"
-                  style={{ width: 180, marginTop: 4 }}
+                  className="gcash-screenshot-image"
                 />
               </div>
             )}
@@ -1795,7 +1809,7 @@ useEffect(() => {
             </p>
 
             {c.imageUrl && (
-              <img src={c.imageUrl} alt="Comment attachment" style={{ width: 180 }} />
+              <img src={c.imageUrl} alt="Comment attachment" className="comment-reply-image" />
             )}
 
             {/* Only show edit/delete for comment owner */}
@@ -1975,7 +1989,7 @@ useEffect(() => {
                       <div>
                         <p><strong>GCash Proof:</strong></p>
                         {console.log("Displaying GCash Screenshot:", rental.gcashScreenshot)}
-                        <img src={rental.gcashScreenshot} alt="GCash Screenshot" style={{ width: 150, marginTop: 4 }} />
+                        <img src={rental.gcashScreenshot} alt="GCash Screenshot" className="rental-gcash-proof-image" />
                       </div>
                     )}
                   </div>
@@ -1998,20 +2012,11 @@ useEffect(() => {
 
        {activePage === "messages" && userRole === "renter" && (
   <div className="messages-renter">
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+    <div className="messages-header">
       <h1>Messages</h1>
       <button 
         onClick={handleDeleteAllConversations}
-        style={{
-          padding: "10px 20px",
-          backgroundColor: "#f44336",
-          color: "#fff",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer",
-          fontWeight: "500",
-          fontSize: "14px"
-        }}
+        className="delete-all-btn"
         disabled={loading}
       >
         🗑️ Delete All
@@ -2076,20 +2081,10 @@ useEffect(() => {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: "fixed",
-          top: "20px",
-          right: "20px",
-          padding: "16px 20px",
-          backgroundColor: toastMessage.startsWith("✅") ? "#4CAF50" : toastMessage.startsWith("❌") ? "#f44336" : "#ff9800",
-          color: "#fff",
-          borderRadius: "8px",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          zIndex: 9999,
-          animation: "slideIn 0.3s ease-out",
-          fontWeight: "500",
-          fontSize: "14px"
-        }}>
+        <div className={`toast-notification ${
+          toastMessage.startsWith("✅") ? "success" : 
+          toastMessage.startsWith("❌") ? "error" : "warning"
+        }`}>
           {toastMessage}
         </div>
       )}

@@ -1,300 +1,1457 @@
-/* ====== COLORS (Renter Only) ====== */
+/* ===============================
+   RENTER DASHBOARD - SCOPED STYLES
+   All styles are scoped to .renter-dashboard to avoid affecting admin
+================================ */
+
 .renter-dashboard {
-  --primary-color: #4CAF50;
-  --secondary-color: #f4f4f4;
-  --text-color: #333;
-  --sidebar-bg: #2c3e50;
+  --primary-color: #5fabc0;
+  --secondary-color: #eceeef;
+  --text-color: #000000;
+  --sidebar-bg: #0ea5e9;
   --sidebar-text: #fff;
   --button-bg: #4CAF50;
   --button-text: #fff;
   --overlay-bg: rgba(0,0,0,0.45);
 }
 
-/* ====== MAIN LAYOUT ====== */
 .renter-dashboard .dashboard-container {
   display: flex;
-  height: 100vh;
-  overflow: hidden;
-  background-color: var(--secondary-color);
+  min-height: 100vh;
+  width: 100%;
 }
 
-/* ===== MENU TOGGLE BUTTON ===== */
-.renter-dashboard .menu-toggle {
-  display: none;
-  position: fixed;
-  top: 15px;
-  left: 15px;
-  z-index: 1100;
-  font-size: 24px;
-  background-color: var(--primary-color);
-  color: var(--button-text);
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
+/* ===============================
+   SIDEBAR (managed by Sidebar.css)
+================================ */
+/* Sidebar styling comes from Sidebar.css - do not override */
 
-/* ===== SIDEBAR ===== */
-.renter-dashboard .sidebar {
-  width: 240px;
-  background-color: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100%;
-  z-index: 1100;
-  overflow-y: auto;
-  transition: left 0.3s ease;
-  padding-top: 20px;
-}
-
-.renter-dashboard .sidebar a {
-  display: block;
-  padding: 10px 20px;
-  text-decoration: none;
-  color: var(--sidebar-text);
-}
-
-.renter-dashboard .sidebar a.active {
-  background-color: var(--primary-color);
-}
-
-.renter-dashboard .sidebar.open {
-  left: 0;
-}
-
-/* ===== SIDEBAR OVERLAY ===== */
-.renter-dashboard .sidebar-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: var(--overlay-bg);
-  z-index: 1000;
-}
-
-/* ===== DASHBOARD CONTENT ===== */
+/* ===============================
+   MAIN CONTENT
+================================ */
 .renter-dashboard .dashboard-content {
   flex: 1;
-  margin-left: 240px;
-  padding: 20px;
+  margin-left: 180px;
+  width: calc(100% - 180px);
+  padding: 24px;
   overflow-y: auto;
-  transition: margin-left 0.3s ease;
+  transition: all 0.3s ease;
   background-color: var(--secondary-color);
 }
 
-/* MOBILE RESPONSIVE */
-@media (max-width: 1024px) {
-  .renter-dashboard .sidebar {
-    left: -240px;
-  }
-
-  .renter-dashboard .sidebar.open {
-    left: 0;
-  }
-
-  .renter-dashboard .menu-toggle {
-    display: block;
-  }
-
-  .renter-dashboard .sidebar.open ~ .sidebar-overlay {
-    display: block;
-  }
-
+@media (max-width: 768px) {
   .renter-dashboard .dashboard-content {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* ===============================
+   GLOBAL RESET FOR RENTER
+================================ */
+.renter-dashboard * {
+  box-sizing: border-box;
+}
+
+.renter-dashboard {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #ebeef0;
+}
+
+/* ===============================
+   PAGE SECTIONS
+================================ */
+.renter-dashboard .profile-renter {
+  background: var(--primary-color);
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 500px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: var(--text-color);
+}
+
+.renter-dashboard .profile-renter h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+
+/* ===============================
+   PROFILE CONTAINER
+================================ */
+.renter-dashboard .profile-container {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.renter-dashboard .profile-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #5fabc0;
+  margin: 0 auto 15px;
+  display: block;
+}
+
+.renter-dashboard .profile-info {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.renter-dashboard .profile-info p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+/* ===============================
+   PROFILE ACTIONS
+================================ */
+.renter-dashboard .profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.renter-dashboard .profile-actions button,
+.renter-dashboard .profile-form-buttons button {
+  padding: 10px 20px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .edit-btn {
+  background: #2196F3;
+  color: white;
+}
+
+.renter-dashboard .edit-btn:hover {
+  background: #1976D2;
+}
+
+.renter-dashboard .settings-btn {
+  background: #9e9e9e;
+  color: white;
+}
+
+.renter-dashboard .settings-btn:hover {
+  background: #757575;
+}
+
+.renter-dashboard .profile-form-buttons button:first-child {
+  background: #4CAF50;
+  color: white;
+}
+
+.renter-dashboard .profile-form-buttons button:first-child:hover {
+  background: #45a049;
+}
+
+.renter-dashboard .profile-form-buttons button:last-child {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.renter-dashboard .profile-form-buttons button:last-child:hover {
+  background: #d0d0d0;
+}
+
+/* ===============================
+   PROFILE FORM
+================================ */
+.renter-dashboard .profile-form,
+.renter-dashboard .settings-form {
+  max-width: 350px;
+  margin: 20px auto 0;
+  padding: 15px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.renter-dashboard .profile-form label,
+.renter-dashboard .settings-form label {
+  display: block;
+  margin: 10px 0 4px;
+  font-weight: 500;
+  font-size: 12px;
+  color: #000;
+}
+
+.renter-dashboard .profile-form input,
+.renter-dashboard .settings-form input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 12px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+
+/* ===============================
+   BROWSE RENTALS
+================================ */
+.renter-dashboard .browse-rentals-renter {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  margin-left: 180px;
+}
+
+/* Remove left margin on mobile/tablet */
+@media (max-width: 1200px) {
+  .renter-dashboard .browse-rentals-renter {
     margin-left: 0;
   }
 }
 
-/* ====== MESSAGES ====== */
-.renter-dashboard .messages-container {
-  display: flex;
-  gap: 15px;
-  height: 75vh;
-  overflow: hidden;
+.renter-dashboard .browse-rentals-renter h1 {
+  color: #4CAF50;
+  margin-bottom: 20px;
+  font-size: 24px;
 }
 
-.renter-dashboard .conversation-list {
-  flex: 0 0 250px;
-  background: #e0f2fe;
-  padding: 10px;
+.renter-dashboard .search-bar {
+  margin-bottom: 20px;
+}
+
+.renter-dashboard .search-bar input {
+  width: 100%;
+  max-width: 500px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  border: 1px solid #e5e5e5;
+  font-size: 14px;
+  outline: none;
+}
+
+.renter-dashboard .search-bar input:focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.3);
+}
+
+/* ===============================
+   RENTAL GRID
+================================ */
+.renter-dashboard .rental-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+/* Split screen / Laptop (2 columns) */
+@media (min-width: 600px) and (max-width: 1200px) {
+  .renter-dashboard .rental-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+}
+
+/* Mobile only (1 column like Shopee) */
+@media (max-width: 599px) {
+  .renter-dashboard .rental-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.renter-dashboard .rental-card {
+  background: #ffffff;
   border-radius: 12px;
-  overflow-y: auto;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 0;
+  transition: all 0.2s ease;
 }
 
-.renter-dashboard .conversation-item {
+.renter-dashboard .rental-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+.renter-dashboard .rental-image {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  background: #f5f5f5;
+}
+
+.renter-dashboard .rental-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.renter-dashboard .rental-card h3 {
+  margin: 10px 12px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.renter-dashboard .rental-card p {
+  margin: 4px 12px;
+  font-size: 13px;
+  color: #666;
+}
+
+/* ===============================
+   MESSAGE OWNER INPUT
+================================ */
+.renter-dashboard .message-owner {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #f9f9f9;
+  border-top: 1px solid #e5e5e5;
+}
+
+.renter-dashboard .message-owner input {
+  flex: 1;
   padding: 8px 12px;
-  margin-bottom: 6px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.renter-dashboard .message-owner button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 7px;
+  margin-right: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .message-owner button:hover {
+  background: #45a049;
+}
+
+/* ===============================
+   COMMENTS SECTION
+================================ */
+.renter-dashboard .comments-section {
+  padding: 12px;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  margin-top: 10px;
+  border-radius: 0 0 12px 12px;
+}
+
+.renter-dashboard .comments-section button {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .comments-section button:hover {
+  background: #e0e0e0;
+}
+
+.renter-dashboard .comment-input-row,
+.renter-dashboard .reply-input-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.renter-dashboard .comment-input-row input,
+.renter-dashboard .reply-input-row input {
+  flex: 1;
+  min-width: 100px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.renter-dashboard .comment-input-row button,
+.renter-dashboard .reply-input-row button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .comment-input-row button:hover,
+.renter-dashboard .reply-input-row button:hover {
+  background: #45a049;
+}
+
+.renter-dashboard .comments-list {
+  margin-top: 10px;
+}
+
+.renter-dashboard .comment-card {
+  background: #ffffff;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border-left: 3px solid #4CAF50;
+  font-size: 12px;
+}
+
+.renter-dashboard .comment-card p {
+  margin: 4px 0;
+  word-break: break-word;
+}
+
+.renter-dashboard .comment-image-preview,
+.renter-dashboard .comment-attachment-image,
+.renter-dashboard .comment-reply-image {
+  max-width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border-radius: 6px;
+}
+
+.renter-dashboard .comment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.renter-dashboard .comment-actions button {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .comment-actions button:hover {
+  background: #e0e0e0;
+}
+
+/* ===============================
+   RENTAL MODAL
+================================ */
+.renter-dashboard .rental-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+}
+
+.renter-dashboard .rental-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 650px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  position: relative;
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Split screen - slightly larger modal */
+@media (max-width: 1200px) {
+  .renter-dashboard .rental-modal {
+    max-width: 550px;
+    padding: 24px;
+  }
+}
+
+/* Mobile - Shopee style bottom sheet */
+@media (max-width: 599px) {
+  .renter-dashboard .rental-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .renter-dashboard .rental-modal {
+    border-radius: 16px 16px 0 0;
+    max-width: 100%;
+    width: 100%;
+    padding: 20px 16px;
+    max-height: 85vh;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.renter-dashboard .rental-modal .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #f0f0f0;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .rental-modal .close-btn:hover {
+  background: #e0e0e0;
+}
+
+.renter-dashboard .rental-modal h2 {
+  color: #4CAF50;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.renter-dashboard .rental-modal img {
+  width: 100%;
+  height: 300px;
+  object-fit: contain;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+/* ===============================
+   RENTAL FORM
+================================ */
+.renter-dashboard .rental-form {
+  margin-top: 15px;
+}
+
+.renter-dashboard .rental-form label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: 600;
+  color: #000;
+  font-size: 14px;
+}
+
+.renter-dashboard .rental-form input,
+.renter-dashboard .rental-form select {
+  max-width: 400px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+  background: #fafafa;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .rental-form input[name="placeName"],
+.renter-dashboard .rental-form select {
+  padding: 14px;
+}
+
+.renter-dashboard .rental-form input:focus,
+.renter-dashboard .rental-form select:focus {
+  outline: none;
+  border-color: #4CAF50;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.25);
+}
+
+.renter-dashboard #rental-map {
+  height: 300px;
+  margin: 15px 0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+/* ===============================
+   GCASH INFO
+================================ */
+.renter-dashboard .gcash-info {
+  background: #e8f5e9;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 15px 0;
+  border-left: 4px solid #4CAF50;
+}
+
+.renter-dashboard .gcash-info h4 {
+  margin-top: 0;
+  color: #2e7d32;
+}
+
+.renter-dashboard .gcash-info p {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.renter-dashboard .gcash-screenshot-container {
+  margin-top: 10px;
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 6px;
+}
+
+.renter-dashboard .gcash-screenshot-image {
+  max-width: 200px;
+  height: auto;
+  margin-top: 8px;
+  border-radius: 6px;
+}
+
+/* ===============================
+   RENTAL FEES
+================================ */
+.renter-dashboard .rental-fees {
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+}
+
+.renter-dashboard .rental-fees label {
+  display: block;
+  margin: 8px 0 4px;
+  font-weight: 600;
+  color: #000;
+  font-size: 13px;
+}
+
+.renter-dashboard .rental-fees input {
+  max-width: 250px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.renter-dashboard .rental-fees p {
+  margin: 8px 0;
+  font-size: 13px;
+  color: #333;
+  font-weight: 600;
+}
+
+/* ===============================
+   FORM BUTTONS
+================================ */
+.renter-dashboard .form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.renter-dashboard .form-buttons button {
+  padding: 12px 28px;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
-  background: #bae6fd;
-  transition: background 0.2s;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  min-width: auto;
+  width: auto;
 }
 
-.renter-dashboard .conversation-item.active {
-  background: #0ea5e9;
+.renter-dashboard .cancel-btn {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.renter-dashboard .cancel-btn:hover {
+  background: #d0d0d0;
+}
+
+.renter-dashboard .submit-btn {
+  background: #4CAF50;
   color: white;
 }
 
-.renter-dashboard .chat-window {
+.renter-dashboard .submit-btn:hover {
+  background: #45a049;
+}
+
+/* ===============================
+   MY RENTALS
+================================ */
+.renter-dashboard .my-rentals-renter {
+  padding: 20px;
+}
+
+.renter-dashboard .rentals-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.renter-dashboard .rentals-title {
+  color: #4CAF50;
+  margin-bottom: 20px;
+  font-size: 24px;
+}
+
+/* ===============================
+   RENTALS TABS
+================================ */
+.renter-dashboard .rentals-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.renter-dashboard .rentals-tab-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  background: #f0f0f0;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .rentals-tab-btn.active {
+  background: #4CAF50;
+  color: white;
+}
+
+.renter-dashboard .rentals-tab-btn:hover {
+  background: #e0e0e0;
+}
+
+.renter-dashboard .rentals-tab-btn.active:hover {
+  background: #45a049;
+}
+
+/* ===============================
+   RENTAL LIST
+================================ */
+.renter-dashboard .rental-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* Split screen / Laptop (2 columns) */
+@media (min-width: 600px) and (max-width: 1200px) {
+  .renter-dashboard .rental-list {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+}
+
+/* Mobile only (1 column like Shopee) */
+@media (max-width: 599px) {
+  .renter-dashboard .rental-list {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.renter-dashboard .rental-card {
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .rental-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.renter-dashboard .rental-card.cancelled {
+  opacity: 0.6;
+}
+
+.renter-dashboard .rental-card.returned {
+  border: 2px solid #ffc107;
+}
+
+.renter-dashboard .rental-card.completed {
+  border: 2px solid #4CAF50;
+}
+
+.renter-dashboard .rental-card-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.renter-dashboard .rental-actions {
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.renter-dashboard .rental-card-btn {
   flex: 1;
+  min-width: 80px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .cancel-rental-btn {
+  background: #dc3545;
+  color: white;
+}
+
+.renter-dashboard .cancel-rental-btn:hover {
+  background: #c82333;
+}
+
+.renter-dashboard .returned-rental-btn {
+  background: #ffc107;
+  color: #333;
+}
+
+.renter-dashboard .returned-rental-btn:hover {
+  background: #e0a800;
+}
+
+.renter-dashboard .delete-rental-btn {
+  background: #6c757d;
+  color: white;
+}
+
+.renter-dashboard .delete-rental-btn:hover {
+  background: #5a6268;
+}
+
+.renter-dashboard .rental-info {
+  padding: 12px;
+  background: #f9f9f9;
+  font-size: 12px;
+  color: #333;
+}
+
+.renter-dashboard .rental-info p {
+  margin: 4px 0;
+}
+
+.renter-dashboard .no-rentals-text {
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  padding: 40px 20px;
+}
+
+/* ===============================
+   MESSAGES
+================================ */
+.renter-dashboard .messages-renter {
+  padding: 20px;
+}
+
+.renter-dashboard .messages-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.renter-dashboard .messages-header h1 {
+  color: #4CAF50;
+  margin: 0;
+}
+
+.renter-dashboard .delete-all-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .delete-all-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.renter-dashboard .delete-all-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.renter-dashboard .messages-container {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  height: calc(100vh - 180px);
+}
+
+.renter-dashboard .conversation-list {
+  background: linear-gradient(180deg, #e6f4ff 0%, #ffffff 100%);
+  border-radius: 12px;
+  padding: 15px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+}
+
+.renter-dashboard .conversation-list h3 {
+  margin-top: 0;
+  color: #0ea5e9;
+  font-size: 14px;
+}
+
+.renter-dashboard .conversation-item {
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+  font-size: 13px;
+}
+
+.renter-dashboard .conversation-item:hover {
+  background: #f0f0f0;
+}
+
+.renter-dashboard .conversation-item.active {
+  background: #e8f5e9;
+  border-left-color: #4CAF50;
+  font-weight: 600;
+}
+
+.renter-dashboard .chat-window {
   background: #ffffff;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
 .renter-dashboard .chat-header {
-  padding: 10px 15px;
-  background: #0ea5e9;
+  padding: 15px;
+  background: #4CAF50;
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
+.renter-dashboard .chat-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.renter-dashboard .chat-header button {
+  background: #3d8b40;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .chat-header button:hover {
+  background: #2d6830;
+}
+
 .renter-dashboard .chat-messages {
   flex: 1;
-  padding: 15px;
-  background: #f1f5f9;
   overflow-y: auto;
+  padding: 15px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  background: #f9f9f9;
 }
 
 .renter-dashboard .chat-bubble {
   max-width: 70%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 12px;
   word-wrap: break-word;
+  font-size: 13px;
 }
 
 .renter-dashboard .chat-bubble.sent {
-  background: #0ea5e9;
+  background: #4CAF50;
   color: white;
   align-self: flex-end;
   border-bottom-right-radius: 0;
 }
 
 .renter-dashboard .chat-bubble.received {
-  background: #e2e8f0;
-  color: #111;
+  background: #e0e0e0;
+  color: #333;
   align-self: flex-start;
   border-bottom-left-radius: 0;
+}
+
+.renter-dashboard .chat-bubble small {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.7;
+  font-size: 11px;
 }
 
 .renter-dashboard .chat-input {
   display: flex;
   gap: 8px;
-  padding: 10px;
-  background: #f8fafc;
-  border-top: 1px solid #cbd5e1;
+  padding: 15px;
+  background: #ffffff;
+  border-top: 1px solid #e0e0e0;
 }
 
 .renter-dashboard .chat-input input {
   flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  outline: none;
+  font-size: 13px;
+}
+
+.renter-dashboard .chat-input input:focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.3);
 }
 
 .renter-dashboard .chat-input button {
-  background: #0ea5e9;
+  background: #4CAF50;
   color: white;
-  padding: 8px 14px;
-  border-radius: 8px;
   border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
 }
 
-/* ====== RENTAL GRID ====== */
-.renter-dashboard .rental-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 25px;
+.renter-dashboard .chat-input button:hover {
+  background: #45a049;
+}
+
+/* ===============================
+   OWNER PROFILE REPLACEMENT
+================================ */
+.renter-dashboard .owner-profile-replacement {
+  background: #ffffff;
+  border-radius: 12px;
   padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.renter-dashboard .owner-profile-header {
+  position: relative;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 15px;
+}
+
+.renter-dashboard .owner-profile-header .close-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #f0f0f0;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .owner-profile-header .close-btn:hover {
+  background: #e0e0e0;
+}
+
+.renter-dashboard .owner-profile-header h2 {
+  margin: 0 0 10px 0;
+  color: #4CAF50;
+  font-size: 18px;
+}
+
+.renter-dashboard .owner-profile-header p {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.renter-dashboard .owner-profile-header input {
   width: 100%;
+  max-width: 400px;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 10px;
   box-sizing: border-box;
 }
 
-/* RESPONSIVE */
-@media (max-width: 900px) {
+.renter-dashboard .owner-profile-replacement h3 {
+  color: #4CAF50;
+  margin: 15px 0 10px 0;
+  font-size: 15px;
+}
+
+.renter-dashboard .owner-posts-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+/* Split screen / Laptop (2 columns) */
+@media (min-width: 600px) and (max-width: 1200px) {
+  .renter-dashboard .owner-posts-list {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+}
+
+/* Mobile only (1 column like Shopee) */
+@media (max-width: 599px) {
+  .renter-dashboard .owner-posts-list {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.renter-dashboard .owner-post-card {
+  background: #f9f9f9;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .owner-post-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.renter-dashboard .owner-post-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .owner-post-card img:hover {
+  opacity: 0.8;
+}
+
+.renter-dashboard .owner-post-card h4 {
+  margin: 10px 12px 0;
+  color: #333;
+  font-size: 14px;
+}
+
+.renter-dashboard .owner-post-card p {
+  margin: 4px 12px;
+  font-size: 12px;
+  color: #666;
+}
+
+.renter-dashboard .owner-post-card .message-owner {
+  margin: 10px;
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #f9f9f9;
+  border-top: 1px solid #e5e5e5;
+  border-radius: 6px;
+}
+
+/* Split screen - adjust message input size */
+@media (min-width: 600px) and (max-width: 1200px) {
+  .renter-dashboard .owner-post-card .message-owner {
+    flex-wrap: wrap;
+  }
+
+  .renter-dashboard .owner-post-card .message-owner input {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .renter-dashboard .owner-post-card .message-owner button {
+    padding: 8px 14px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
+
+.renter-dashboard .owner-post-card .message-owner input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #853a3a;
+  border-radius: 6px;
+  font-size: 10px;
+  outline: none;
+}
+
+.renter-dashboard .owner-post-card .message-owner button {
+  background: #75b475;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 4px;
+  margin-right: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .owner-post-card .message-owner button:hover {
+  background: #45a049;
+}
+
+.renter-dashboard .owner-post-card .rental-actions {
+  padding: 5px;
+  display: flex;
+  gap: 1px;
+}
+
+.renter-dashboard .owner-post-card .rental-actions button {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .owner-post-card .rental-actions button:first-child {
+  background: #4CAF50;
+  color: white;
+}
+
+.renter-dashboard .owner-post-card .rental-actions button:first-child:hover {
+  background: #45a049;
+}
+
+.renter-dashboard .owner-post-card .rental-actions button:last-child {
+  background: #dc3545;
+  color: white;
+}
+
+.renter-dashboard .owner-post-card .rental-actions button:last-child:hover {
+  background: #c82333;
+}
+
+/* ===============================
+   RENTAL ACTIONS
+================================ */
+.renter-dashboard .rental-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  flex-wrap: wrap;
+}
+
+.renter-dashboard .rental-actions button {
+  flex: 0 1 auto;
+  max-width: 150px;
+  min-width: 100px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard .rental-actions button:first-child {
+  background: #4CAF50;
+  color: white;
+}
+
+.renter-dashboard .rental-actions button:first-child:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.renter-dashboard .rental-actions button:first-child:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.renter-dashboard .rental-actions button:last-child {
+  background: #dc3545;
+  color: white;
+}
+
+.renter-dashboard .rental-actions button:last-child:hover {
+  background: #c82333;
+}
+
+/* ===============================
+   MENU TOGGLE
+================================ */
+.renter-dashboard .menu-toggle {
+  display: none;
+}
+
+/* ===============================
+   MOBILE RESPONSIVE (Mobile only - below 600px)
+================================ */
+@media (max-width: 599px) {
+  .renter-dashboard .menu-toggle {
+    display: block;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    background: #4CAF50;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    z-index: 1200;
+    transition: left 0.3s ease;
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  .renter-dashboard .sidebar.open ~ .menu-toggle {
+    left: 275px;
+  }
+
+  .renter-dashboard .sidebar.open ~ .sidebar-overlay {
+    display: block;
+  }
+
   .renter-dashboard .messages-container {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     height: auto;
+    gap: 10px;
   }
 
   .renter-dashboard .conversation-list {
-    flex: 1;
+    height: 200px;
+    max-height: 200px;
+  }
+
+  .renter-dashboard .chat-messages {
+    height: 300px;
+  }
+
+  .renter-dashboard .rental-modal {
+    margin: 0 16px;
+    max-width: calc(100% - 32px);
+  }
+
+  .renter-dashboard .profile-container {
+    max-width: 100%;
+  }
+
+  .renter-dashboard .rentals-tabs {
+    gap: 6px;
+  }
+
+  .renter-dashboard .rentals-tab-btn {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .renter-dashboard .form-buttons {
+    flex-direction: row;
+    gap: 10px;
+    justify-content: flex-start;
+  }
+
+  .renter-dashboard .form-buttons button {
+    width: auto;
+    min-width: auto;
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+
+  .renter-dashboard .messages-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .renter-dashboard .delete-all-btn {
     width: 100%;
-    height: 150px;
-    display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-    gap: 5px;
-    padding: 5px;
-  }
-
-  .renter-dashboard .conversation-item {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
-  .renter-dashboard .chat-window {
-    height: 400px;
-  }
-
-  .renter-dashboard .rental-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
 
 @media (max-width: 500px) {
-  .renter-dashboard .chat-window {
-    height: 350px;
+  .renter-dashboard .rental-modal {
+    margin: 0 12px;
+    max-width: calc(100% - 24px);
+    padding: 16px;
   }
 
-  .renter-dashboard .chat-input input {
-    font-size: 12px;
+  .renter-dashboard .chat-bubble {
+    max-width: 85%;
   }
 
-  .renter-dashboard .chat-input button {
-    font-size: 12px;
-    padding: 6px 10px;
-  }
-
-  .renter-dashboard .rental-grid {
-    grid-template-columns: 1fr;
+  .renter-dashboard #rental-map {
+    height: 250px;
   }
 }
 
-/* BUTTONS */
-.renter-dashboard button {
-  background-color: var(--button-bg);
-  color: var(--button-text);
-  border: none;
-  padding: 6px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.renter-dashboard button:hover {
-  opacity: 0.9;
-}
-
-.renter-dashboard button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.submit-btn:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-/* ====== TOAST NOTIFICATION ANIMATION ====== */
+/* ===============================
+   TOAST NOTIFICATION
+================================ */
 @keyframes slideIn {
   from {
     transform: translateX(400px);
@@ -304,4 +1461,42 @@
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+.renter-dashboard .toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 16px 20px;
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 9999;
+  animation: slideIn 0.3s ease-out;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.renter-dashboard .toast-notification.success {
+  background-color: #4CAF50;
+}
+
+.renter-dashboard .toast-notification.error {
+  background-color: #f44336;
+}
+
+.renter-dashboard .toast-notification.warning {
+  background-color: #ff9800;
+}
+
+/* ===============================
+   BUTTONS GENERAL
+================================ */
+.renter-dashboard button {
+  transition: all 0.2s ease;
+}
+
+.renter-dashboard button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

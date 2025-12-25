@@ -1,12 +1,12 @@
 /* ===== COLORS (Owner Only) ===== */
 .owner-dashboard {
-  --primary-color: #4CAF50;
-  --secondary-color: #f4f4f4;
-  --text-color: #333;
-  --sidebar-bg: #2c3e50;
+  --primary-color: #94a9b1;
+  --secondary-color: #87ceeb;
+  --text-color: #000000;
+  --sidebar-bg: #0ea5e9;
   --sidebar-text: #fff;
-  --button-bg: #4CAF50;
-  --button-text: #fff;
+  --button-bg: #9ACD32;
+  --button-text: #000000;
   --overlay-bg: rgba(0,0,0,0.45);
 }
 
@@ -23,14 +23,20 @@
   position: fixed;
   top: 15px;
   left: 15px;
-  z-index: 1100;
+  z-index: 1200;
   font-size: 24px;
-  background-color: var(--primary-color);
-  color: var(--button-text);
+  background-color: #9ACD32;
+  color: #000000;
   border: none;
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
+  transition: left 0.3s ease;
+}
+
+/* Keep button visible when sidebar is open */
+.owner-dashboard .sidebar.open ~ .menu-toggle {
+  left: 255px;
 }
 
 /* SIDEBAR */
@@ -543,3 +549,95 @@
   }
 }
 
+/* ===== TOAST NOTIFICATION ===== */
+.owner-dashboard .toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  color: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 9999;
+  font-size: 14px;
+  font-weight: 500;
+  animation: slideIn 0.3s ease-in-out;
+}
+
+.owner-dashboard .toast-notification.success {
+  background: #4CAF50;
+}
+
+.owner-dashboard .toast-notification.error {
+  background: #f44336;
+}
+
+.owner-dashboard .toast-notification.warning {
+  background: #ff9800;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ===== CHAT HEADER ACTIONS ===== */
+.owner-dashboard .chat-header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ===== AUTO REPLY MESSAGE ===== */
+.owner-dashboard .auto-reply-message {
+  background: linear-gradient(135deg, #e8eeff 0%, #f0e8ff 100%);
+  border: 2px solid #667eea;
+  border-radius: 12px;
+  padding: 12px 15px;
+}
+
+.owner-dashboard .auto-reply-label {
+  font-size: 11px;
+  color: #667eea;
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.owner-dashboard .admin-reply-label {
+  font-size: 11px;
+  color: #667eea;
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.owner-dashboard .chat-message-text {
+  white-space: pre-wrap;
+}
+
+.owner-dashboard .chat-message-time {
+  opacity: 0.7;
+}
+
+/* ===== COMMENT IMAGE ===== */
+.owner-dashboard .comment-image-preview {
+  width: 120px;
+  margin-top: 4px;
+}
+
+/* ===== NO MESSAGES TEXT ===== */
+.owner-dashboard .no-messages-text {
+  font-size: 13px;
+  color: #999;
+  margin-top: 10px;
+}

@@ -70,16 +70,17 @@ const OwnerDashboard = ({ onLogout }) => {
         setDisplayName(data.displayName || "");
         setPhotoPreview(data.photoURL || "");
       } else {
-        setDoc(
-          userDocRef,
-          {
-            displayName: auth.currentUser.displayName || "",
-            email: auth.currentUser.email,
-            createdAt: serverTimestamp(),
-            photoURL: auth.currentUser.photoURL || "",
-          },
-          { merge: true }
-        );
+        // Seed owner profile and mirror into shared users collection for admin view
+        const baseProfile = {
+          displayName: auth.currentUser.displayName || "",
+          email: auth.currentUser.email,
+          createdAt: serverTimestamp(),
+          photoURL: auth.currentUser.photoURL || "",
+          role: "owner",
+        };
+
+        setDoc(userDocRef, baseProfile, { merge: true });
+        setDoc(doc(db, "users", auth.currentUser.uid), baseProfile, { merge: true });
       }
     });
     return () => unsub();
@@ -184,6 +185,19 @@ useEffect(() => {
       await setDoc(
         userDocRef,
         { displayName, photoURL, createdAt: user?.createdAt || serverTimestamp() },
+        { merge: true }
+      );
+
+      // Keep shared users collection in sync so AdminDashboard sees latest name/photo
+      await setDoc(
+        doc(db, "users", auth.currentUser.uid),
+        {
+          displayName,
+          photoURL,
+          email: auth.currentUser.email,
+          role: "owner",
+          updatedAt: serverTimestamp(),
+        },
         { merge: true }
       );
       setUser({ ...user, displayName, photoURL });
@@ -811,41 +825,19 @@ useEffect(() => {
    <div className="dashboard-container owner-dashboard">
     {/* TOAST NOTIFICATION */}
     {toastMessage && (
-      <div style={{
-        position: "fixed",
-        top: "20px",
-        right: "20px",
-        background: toastMessage.includes("✅") ? "#4CAF50" : (toastMessage.includes("❌") ? "#f44336" : "#ff9800"),
-        color: "white",
-        padding: "16px 24px",
-        borderRadius: "8px",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-        zIndex: 9999,
-        fontSize: "14px",
-        fontWeight: "500",
-        animation: "slideIn 0.3s ease-in-out",
-      }}>
+      <div className={`toast-notification ${
+        toastMessage.includes("✅") ? "success" : 
+        (toastMessage.includes("❌") ? "error" : "warning")
+      }`}>
         {toastMessage}
       </div>
     )}
-    <style>{`
-      @keyframes slideIn {
-        from {
-          transform: translateX(400px);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-    `}</style>
   {/* MENU TOGGLE BUTTON */}
   <button
     className="menu-toggle"
     onClick={() => setSidebarOpen(!sidebarOpen)}
   >
-    ☰
+    {sidebarOpen ? '✖' : '☰'}
   </button>
 
   {/* SIDEBAR OVERLAY */}
@@ -1293,7 +1285,7 @@ useEffect(() => {
         
         {/* Regular Conversations */}
         {conversationUsers.length === 0 ? (
-          <p style={{ fontSize: "13px", color: "#999", marginTop: "10px" }}>No renter messages yet.</p>
+          <p className="no-messages-text">No renter messages yet.</p>
         ) : (
           conversationUsers
             .filter(user => user !== "renthub-support") // Remove renthub-support
@@ -1318,11 +1310,11 @@ useEffect(() => {
       <div className="chat-window">
         {selectedChat ? (
           <>
-            <div className="chat-header" style={{}}>
+            <div className="chat-header">
               <h3>
                 Chat with {selectedChat}
               </h3>
-              <div style={{ display: "flex", gap: "10px" }}>
+              <div className="chat-header-actions">
                 <button onClick={() => handleDeleteConversation(selectedChat)}>🗑 Delete</button>
                 <button onClick={() => setSelectedChat(null)}>✖ Close</button>
               </div>
@@ -1344,42 +1336,20 @@ useEffect(() => {
                 .map(m => (
                   <div
                     key={m.id}
-                    className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"}`}
-                    style={m.isAutoReply || m.isAdminReply ? {
-                      background: "linear-gradient(135deg, #e8eeff 0%, #f0e8ff 100%)",
-                      border: "2px solid #667eea",
-                      borderRadius: "12px",
-                      padding: "12px 15px"
-                    } : {}}
+                    className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"} ${m.isAutoReply || m.isAdminReply ? "auto-reply-message" : ""}`}
                   >
                     {m.isAutoReply && (
-                      <div style={{ 
-                        fontSize: "11px", 
-                        color: "#667eea", 
-                        fontWeight: "bold", 
-                        marginBottom: "5px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}>
+                      <div className="auto-reply-label">
                         <span>🤖</span> AI Assistant
                       </div>
                     )}
                     {m.isAdminReply && (
-                      <div style={{ 
-                        fontSize: "11px", 
-                        color: "#667eea", 
-                        fontWeight: "bold", 
-                        marginBottom: "5px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}>
+                      <div className="admin-reply-label">
                         <span>👤</span> Support Team
                       </div>
                     )}
-                    <p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>
-                    <small style={{ opacity: 0.7 }}>
+                    <p className="chat-message-text">{m.text}</p>
+                    <small className="chat-message-time">
                       {m.createdAt?.toDate
                         ? m.createdAt.toDate().toLocaleTimeString()
                         : new Date().toLocaleTimeString()}
@@ -1539,7 +1509,7 @@ useEffect(() => {
                               <img
                                 src={c.imageUrl}
                                 alt="Comment proof"
-                                style={{ width: 120, marginTop: 4 }}
+                                className="comment-image-preview"
                               />
                             )}
 
