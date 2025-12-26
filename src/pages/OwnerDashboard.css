@@ -304,13 +304,21 @@
 }
 
 /* ===== RENTAL ITEM CARDS ===== */
-.owner-dashboard .rentalitem-owner,
+.owner-dashboard .rentalitem-owner {
+  background: var(--primary-color);
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px 40px;
+  max-width: 1200px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
 .owner-dashboard .addrentalitem-section {
   background: var(--primary-color);
   border-radius: 12px;
   padding: 15px 20px;
-  margin: 30px auto 20px;
-  max-width: 900px;
+  margin: 30px auto 20px 40px;
+  max-width: 500px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
@@ -323,6 +331,117 @@
   text-align: center;
 }
 
+/* Properties/Rental Items Grid - Owner Only */
+.owner-dashboard .rentalitem-owner .properties-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-top: 15px;
+}
+
+/* Split screen - 2 columns (600px to 950px) */
+@media (min-width: 600px) and (max-width: 950px) {
+  .owner-dashboard .rentalitem-owner .properties-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mobile - 1 column (below 600px) */
+@media (max-width: 599px) {
+  .owner-dashboard .rentalitem-owner .properties-list {
+    grid-template-columns: 1fr;
+  }
+}
+.owner-dashboard .rentalitem-owner .property-card {
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.owner-dashboard .rentalitem-owner .property-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.owner-dashboard .rentalitem-owner .property-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.owner-dashboard .rentalitem-owner .property-card h3 {
+  margin: 12px 12px 8px 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.owner-dashboard .rentalitem-owner .property-card p {
+  margin: 6px 12px;
+  font-size: 14px;
+  color: #666;
+}
+
+.owner-dashboard .rentalitem-owner .property-card p strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.owner-dashboard .rentalitem-owner .property-actions {
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.owner-dashboard .rentalitem-owner .property-actions button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.owner-dashboard .rentalitem-owner .delete-btn {
+  background: #f44336;
+  color: white;
+}
+
+.owner-dashboard .rentalitem-owner .delete-btn:hover {
+  background: #d32f2f;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.3);
+}
+
+.owner-dashboard .rentalitem-owner .comments-section {
+  padding: 0 12px 12px 12px;
+}
+
+.owner-dashboard .rentalitem-owner .comments-section > button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #2196F3;
+  color: white;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+  margin-right: 8px;
+}
+
+.owner-dashboard .rentalitem-owner .comments-section > button:hover {
+  background: #1976D2;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+}
+
+/* Legacy styles for compatibility */
 .owner-dashboard .rentalitem-section .property-card,
 .owner-dashboard .addpost-section .property-card {
   background: #fff;
@@ -347,6 +466,72 @@
 }
 
 /* ===== ADD RENTAL FORM ===== */
+.owner-dashboard .addrentalitem-section form {
+  background: #ffffff;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.owner-dashboard .addrentalitem-section form > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.owner-dashboard .addrentalitem-section form label {
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+}
+
+.owner-dashboard .addrentalitem-section form input,
+.owner-dashboard .addrentalitem-section form textarea,
+.owner-dashboard .addrentalitem-section form select {
+  max-width: 400px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.owner-dashboard .addrentalitem-section form input[type="checkbox"] {
+  width: auto;
+  margin-right: 8px;
+}
+
+.owner-dashboard .addrentalitem-section form button[type="submit"] {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  max-width: 180px;
+  align-self: flex-start;
+}
+
+.owner-dashboard .addrentalitem-section form button[type="submit"]:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+}
+
+.owner-dashboard .addrentalitem-section form button[type="submit"]:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+/* Legacy form styles for compatibility */
 .owner-dashboard .addpost-form {
   display: flex;
   flex-direction: column;
@@ -376,8 +561,8 @@
   background: var(--primary-color);
   border-radius: 12px;
   padding: 15px 20px;
-  margin: 30px auto 20px;
-  max-width: 1200px;
+  margin: 30px auto 20px 40px;
+  max-width: 900px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
@@ -392,7 +577,8 @@
 .owner-dashboard .messages-container {
   display: flex;
   gap: 20px;
-  min-height: calc(100vh - 180px);
+  width: 100%;
+  position: relative;
 }
 
 /* Expand list when no chat is open */
@@ -409,6 +595,7 @@
   overflow-y: auto;
   border: 1px solid #ddd;
   flex: 0 0 320px;
+  max-height: 450px;
 }
 
 .owner-dashboard .conversation-list h3 {
@@ -452,6 +639,7 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
   flex: 1;
+  max-height: 450px;
 }
 
 .owner-dashboard .chat-header {
@@ -583,21 +771,68 @@
 
 /* Medium screens / split-view tweaks */
 @media (max-width: 1100px) {
-  .owner-dashboard .messages-container {
-    min-height: calc(100vh - 140px);
-  }
-
   .owner-dashboard .conversation-list {
     flex-basis: 260px;
   }
 }
 
 /* Mobile messenger-like layout */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
+  .owner-dashboard .messages-owner {
+    padding: 8px 10px;
+  }
+
   .owner-dashboard .messages-container {
     flex-direction: column;
-    gap: 12px;
-    min-height: calc(100vh - 120px);
+    gap: 0;
+    height: calc(80vh - 50px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .owner-dashboard .conversation-list {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 100px;
+    max-height: 60vh;
+    border-right: none;
+    border-bottom: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 20;
+    transition: left 0.3s ease;
+  }
+
+  .owner-dashboard .chat-window {
+    flex: 1;
+    width: 100%;
+    height: 70%;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    z-index: 10;
+    transition: left 0.3s ease;
+  }
+
+  /* When chat is open, shift conversation list out and chat window in */
+  .owner-dashboard .messages-container.chat-open .conversation-list {
+    left: -100%;
+  }
+
+  .owner-dashboard .messages-container.chat-open .chat-window {
+    left: 0;
+  }
+}
+
+/* Split screen / tablet */
+@media (max-width: 1024px) and (min-width: 600px) {
+  .owner-dashboard .messages-container {
+    flex-direction: column;
+    gap: 0;
+    height: calc(80vh - 50px);
+    position: relative;
+    overflow: hidden;
   }
 
   .owner-dashboard .conversation-list {
@@ -605,19 +840,43 @@
     height: 45vh;
     border-right: none;
     border-bottom: 1px solid #e5e5e5;
+    position: relative;
+    left: auto;
+    top: auto;
+    z-index: 20;
   }
 
   .owner-dashboard .chat-window {
+    flex: 1;
     width: 100%;
-    height: 55vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    left: auto;
+    top: auto;
+    z-index: 10;
   }
 
+  .owner-dashboard .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .owner-dashboard .chat-input {
+    padding: 10px 12px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* When chat is open, hide conversation list */
   .owner-dashboard .messages-container.chat-open .conversation-list {
     display: none;
   }
 
   .owner-dashboard .messages-container.chat-open .chat-window {
-    height: calc(100vh - 140px);
+    height: calc(100vh - 80px);
   }
 }
 
@@ -641,6 +900,32 @@
   .owner-dashboard .rental-grid {
     grid-template-columns: 1fr;
     gap: 15px;
+  }
+}
+
+/* Mobile - Add Rental Item & Rental Item */
+@media (max-width: 768px) {
+  .owner-dashboard .addrentalitem-section {
+    margin: 30px auto 20px;
+    max-width: 500px;
+  }
+
+  .owner-dashboard .rentalitem-owner {
+    margin: 30px 20px 20px 40px;
+    max-width: 850px;
+  }
+}
+
+/* Split screen / tablet - Add Rental Item & Rental Item */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .owner-dashboard .addrentalitem-section {
+    margin: 30px auto 20px;
+    max-width: 500px;
+  }
+
+  .owner-dashboard .rentalitem-owner {
+    margin: 30px 20px 20px 40px;
+    max-width: 850px;
   }
 }
 

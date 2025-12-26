@@ -24,14 +24,14 @@
 .register-box {
   position: relative;
   z-index: 1;
-  width: 400px;
+  width: 340px;
   background: rgba(28, 28, 28, 0.12);
   border-radius: 18px;
   box-shadow: 0 10px 35px rgba(70, 220, 188, 0.4);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(12, 123, 197, 0.25);
-  padding: 45px;
+  padding: 30px;
   text-align: center;
   color: #0f0f0e;
   animation: fadeIn 0.8s ease-in-out;
@@ -41,7 +41,7 @@
 .register-title {
   font-size: 26px;
   font-weight: 700;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   color: #309fce;
   text-shadow: 0 0 10px rgba(120, 240, 255, 0.35);
 }
@@ -50,39 +50,39 @@
 .register-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 13px;
 }
 
 .register-input {
-  padding: 12px 16px;
+  padding: 9px 12px;
   border: none;
   border-radius: 10px;
   outline: none;
-  background: rgba(30, 191, 180, 0.2);
-  color: #33dfdd;
-  font-size: 15px;
+  background: #ffffff;
+  color: #000;
+  font-size: 13px;
   transition: all 0.3s ease;
-  box-shadow: inset 0 0 8px rgba(8, 104, 167, 0.2);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.1);
 }
 
 .register-input::placeholder {
-  color: #2ea3b5;
+  color: #000;
 }
 
 .register-input:focus {
-  background: rgba(43, 52, 225, 0.35);
-  box-shadow: 0 0 10px rgba(213, 17, 47, 0.6);
+  background: #ffffff;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15);
 }
 
 /* ===== Register Button ===== */
 .register-btn {
   background: linear-gradient(90deg, #6ad0ff, #7cf4c4);
   border: none;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 10px;
-  color: rgb(55, 213, 234);
+  color: #000;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(120, 240, 220, 0.4);
@@ -103,19 +103,20 @@
 
 /* ===== Social Login ===== */
 .social-login {
-  margin-top: 25px;
+  margin-top: 12px;
 }
 
 .social-login p {
   font-size: 14px;
   opacity: 0.9;
+  margin-bottom: 8px;
 }
 
 .social-buttons {
   display: flex;
   justify-content: center;
-  gap: 15px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .google-btn,
@@ -124,12 +125,12 @@
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 10px;
   color: #489dd1;
-  padding: 10px 14px;
+  padding: 9px 13px;
   font-size: 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.3s ease;
 }
 
@@ -148,7 +149,7 @@
 
 /* ===== Switch to Login ===== */
 .register-switch {
-  margin-top: 25px;
+  margin-top: 10px;
   font-size: 14px;
   color: #d9faff;
 }
@@ -157,6 +158,7 @@
   color: #9feeff;
   cursor: pointer;
   font-weight: 600;
+  font-size: 15px;
   transition: color 0.3s ease;
 }
 

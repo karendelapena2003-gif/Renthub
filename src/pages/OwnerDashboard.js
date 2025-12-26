@@ -1587,7 +1587,7 @@ useEffect(() => {
 
 
        {activePage === "addrentalitem" && userRole === "owner" && (
-  <section>
+  <section className="addrentalitem-section">
     <h2>Add Rental Item</h2>
     <form onSubmit={handleAddPost}>
       <div>
@@ -1665,7 +1665,9 @@ useEffect(() => {
         {activePage === "rentalitem" && userRole === "owner" && (
           <section className="rentalitem-owner">
             <h2>Rental Item</h2>
-            {posts.length===0 ? <p>No rental items yet.</p> : posts.map(post=>(
+            {posts.length===0 ? <p>No rental items yet.</p> : (
+              <div className="properties-list">
+                {posts.map(post=>(
               <div key={post.id} className="property-card">
                 {post.imageUrl && <img src={post.imageUrl} alt={post.name} className="property-image"/>}
                 <h3>{post.name}</h3>
@@ -1760,6 +1762,8 @@ useEffect(() => {
                 </div>
               </div>
             ))}
+            </div>
+            )}
           </section>
         )}
 
