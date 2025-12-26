@@ -81,6 +81,7 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ownerPostsList, setOwnerPostsList] = useState([]);
   const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
   const [ownerNames, setOwnerNames] = useState({});
+  const [userProfiles, setUserProfiles] = useState({});
 const [showSettings, setShowSettings] = useState(false);
 const [currentPassword, setCurrentPassword] = useState("");
 const [newPassword, setNewPassword] = useState("");
@@ -92,6 +93,8 @@ const [passwordLoading, setPasswordLoading] = useState(false);
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
 const [selectedTab, setSelectedTab] = useState("Processing");
+  const [messageSearch, setMessageSearch] = useState("");
+  const [lastReadByChat, setLastReadByChat] = useState({});
 
 // Filter rentals by selected status
 const filteredRentals = myRentals.filter((r) => r.status === selectedTab);
@@ -1021,11 +1024,31 @@ useEffect(() => {
       // Sort newest first
       mine.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setMessages(mine);
+
+      // Fetch user profiles for all participants
+      const participants = Array.from(new Set(mine.map(m => m.sender === renterEmail ? m.receiver : m.sender)));
+      participants.forEach(email => {
+        const userQuery = query(collection(db, "users"), where("email", "==", email));
+        const unsub = onSnapshot(userQuery, (snapshot) => {
+          if (!snapshot.empty) {
+            const userData = snapshot.docs[0].data();
+            setUserProfiles(prev => ({ ...prev, [email]: userData }));
+          }
+        });
+        unsubscribers.push(unsub);
+      });
     })
   );
 
   return () => unsubscribers.forEach(u => u());
 }, [renterEmail]);
+
+// Mark chat as read when messages update for the open chat
+useEffect(() => {
+  if (selectedChat) {
+    markChatRead(selectedChat);
+  }
+}, [selectedChat, messages]);
 
 // ---------------- MESSAGING ----------------
   const handleSendMessageToOwner = (postId, ownerEmail) => {
@@ -1069,6 +1092,16 @@ useEffect(() => {
     }
   };
 
+  const markChatRead = (chatUser) => {
+    const chatMessages = messages
+      .filter((m) => (m.sender === chatUser && m.receiver === renterEmail) || (m.receiver === chatUser && m.sender === renterEmail))
+      .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+
+    const last = chatMessages[chatMessages.length - 1];
+    const lastTs = last?.createdAt?.seconds || Math.floor(Date.now() / 1000);
+    setLastReadByChat((prev) => ({ ...prev, [chatUser]: lastTs }));
+  };
+
   
   const handleDeleteAllConversations = async () => {
     if (messages.length === 0) {
@@ -1096,10 +1129,49 @@ useEffect(() => {
     }
   };
 
+  const handleDeleteConversation = async (chatUser) => {
+    try {
+      setLoading(true);
+      const snap = await getDocs(collection(db, "messages"));
+      const toDelete = snap.docs.filter(
+        (d) =>
+          (d.data().sender === renterEmail && d.data().receiver === chatUser) ||
+          (d.data().receiver === renterEmail && d.data().sender === chatUser)
+      );
+
+      await Promise.all(toDelete.map((d) => deleteDoc(doc(db, "messages", d.id))));
+
+      // Optimistically update local state
+      setMessages((prev) =>
+        prev.filter(
+          (m) =>
+            !(
+              (m.sender === renterEmail && m.receiver === chatUser) ||
+              (m.receiver === renterEmail && m.sender === chatUser)
+            )
+        )
+      );
+
+      if (selectedChat === chatUser) {
+        setSelectedChat(null);
+      }
+
+      setToastMessage("✅ Conversation deleted");
+      setTimeout(() => setToastMessage(""), 2000);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete conversation");
+      setTimeout(() => setToastMessage(""), 3500);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleMessageNow = (post) => {
     if (!post?.ownerEmail) return alert("Owner has no email");
     setSelectedChat(post.ownerEmail);
     setActivePage("messages");
+    markChatRead(post.ownerEmail);
   };
 
   // ✅ AUTO CLOSE SIDEBAR ON PAGE CHANGE (MOBILE ONLY)
@@ -2014,65 +2086,109 @@ useEffect(() => {
   <div className="messages-renter">
     <div className="messages-header">
       <h1>Messages</h1>
-      <button 
-        onClick={handleDeleteAllConversations}
-        className="delete-all-btn"
-        disabled={loading}
-      >
-        🗑️ Delete All
-      </button>
     </div>
-    <div className="messages-container">
+    <div className={`messages-container ${selectedChat ? "chat-open" : "no-chat"}`}>
       <div className="conversation-list">
-        <h3>Conversations</h3>
+        <div className="conversation-list-header">
+          <h3>Conversations</h3>
+          <div className="messages-search-box">
+            <span>🔍</span>
+            <input
+              type="text"
+              placeholder="Search email"
+              className="messages-search-input"
+              value={messageSearch}
+              onChange={(e) => setMessageSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         {Array.from(new Set(messages.map(m => m.sender === renterEmail ? m.receiver : m.sender)))
-          .map(email => (
-            <div
-              key={email}
-              className={`conversation-item ${selectedChat === email ? "active" : ""}`}
-              onClick={() => setSelectedChat(email)}
-            >
-              {email}
-            </div>
-          ))
+          .filter(email => (email || "").toLowerCase().includes(messageSearch.toLowerCase()))
+          .sort((a, b) => {
+            const lastA = messages.filter(m => (m.sender === a && m.receiver === renterEmail) || (m.receiver === a && m.sender === renterEmail)).pop();
+            const lastB = messages.filter(m => (m.sender === b && m.receiver === renterEmail) || (m.receiver === b && m.sender === renterEmail)).pop();
+            return (lastB?.createdAt?.seconds || 0) - (lastA?.createdAt?.seconds || 0);
+          })
+          .map(email => {
+            const convoMessages = messages.filter(m => (m.sender === email && m.receiver === renterEmail) || (m.receiver === email && m.sender === renterEmail));
+            const lastMsg = convoMessages[convoMessages.length - 1];
+            const lastRead = lastReadByChat[email] || 0;
+            const unreadCount = convoMessages.filter(m => m.receiver === renterEmail && (m.createdAt?.seconds || 0) > lastRead).length;
+
+            return (
+              <div
+                key={email}
+                className={`conversation-item ${selectedChat === email ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedChat(email);
+                  markChatRead(email);
+                }}
+              >
+                <div className="conversation-avatar">
+                  {userProfiles[email]?.photoURL ? (
+                    <img src={userProfiles[email].photoURL} alt={email} />
+                  ) : (
+                    <span>{(userProfiles[email]?.displayName || email).charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="conversation-preview">
+                  <div className="conversation-email">{email}</div>
+                  <div className={`conversation-preview-text ${unreadCount > 0 ? "unread" : ""}`}>{lastMsg?.text || "No messages"}</div>
+                </div>
+                <button
+                  type="button"
+                  className="conversation-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteConversation(email);
+                  }}
+                  disabled={loading}
+                >
+                  🗑
+                </button>
+                {unreadCount > 0 && (
+                  <span className="conversation-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                )}
+              </div>
+            );
+          })
         }
         {messages.length === 0 && <p>No messages yet.</p>}
       </div>
 
-      <div className="chat-window">
-        {selectedChat ? (
-          <>
-            <div className="chat-header">
-              <h3>Chat with {selectedChat}</h3>
-              <button onClick={() => setSelectedChat(null)}>✖ Close</button>
-            </div>
+      {selectedChat && (
+        <div className="chat-window">
+          <div className="chat-header">
+            <h3>Chat with {selectedChat}</h3>
+            <button onClick={() => setSelectedChat(null)}>✖ Close</button>
+          </div>
 
-            <div className="chat-messages">
-              {messages
-                .filter(m => m.sender === renterEmail || m.receiver === renterEmail)
-                .filter(m => m.sender === selectedChat || m.receiver === selectedChat)
-                .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
-                .map(m => (
-                  <div key={m.id} className={`chat-bubble ${m.sender === renterEmail ? "sent" : "received"}`}>
-                    <p>{m.text}</p>
-                    <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
-                  </div>
-                ))}
-            </div>
+          <div className="chat-messages">
+            {messages
+              .filter(m => m.sender === renterEmail || m.receiver === renterEmail)
+              .filter(m => m.sender === selectedChat || m.receiver === selectedChat)
+              .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+              .map(m => (
+                <div key={m.id} className={`chat-bubble ${m.sender === renterEmail ? "sent" : "received"}`}>
+                  <p>{m.text}</p>
+                  <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+                </div>
+              ))}
+          </div>
 
-            <div className="chat-input">
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={replyText[selectedChat] || ""}
-                onChange={e => setReplyText(prev => ({ ...prev, [selectedChat]: e.target.value }))}
-                onKeyDown={e => { if(e.key === "Enter") handleReply(selectedChat) }}
-              />
-              <button onClick={() => handleReply(selectedChat)}>Send</button>
-            </div>
-          </>
-        ) : <p>Select a conversation to start chatting.</p>}
-      </div>
+          <div className="chat-input">
+            <input
+              type="text"
+              placeholder="Type your message..."
+              value={replyText[selectedChat] || ""}
+              onChange={e => setReplyText(prev => ({ ...prev, [selectedChat]: e.target.value }))}
+              onKeyDown={e => { if(e.key === "Enter") handleReply(selectedChat) }}
+            />
+            <button onClick={() => handleReply(selectedChat)}>Send</button>
+          </div>
+        </div>
+      )}
     </div>
   </div>
 

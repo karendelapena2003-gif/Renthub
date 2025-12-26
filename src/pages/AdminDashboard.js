@@ -316,11 +316,18 @@ const updateRentalStatus = async (rentalId, status) => {
     const rentalData = rentalSnap.data();
     const previousStatus = rentalData.status;
 
-    // Update the rental status
-    await updateDoc(rentalRef, {
+    // Update the rental status with completedAt timestamp
+    const updateData = {
       status,
       updatedAt: serverTimestamp(),
-    });
+    };
+    
+    // Add completedAt timestamp when marking as Completed
+    if (status === "Completed" && previousStatus !== "Completed") {
+      updateData.completedAt = serverTimestamp();
+    }
+    
+    await updateDoc(rentalRef, updateData);
 
     // ✅ Only add earnings ONCE when changing to Completed
     if (previousStatus !== "Completed" && status === "Completed") {
@@ -349,15 +356,16 @@ const updateRentalStatus = async (rentalId, status) => {
 
       // Update earnings using increment()
       if (ownerRef) {
-        const earningsToAdd = Number(
-          rentalData.totalAmount || rentalData.totalPrice || rentalData.price || 0
-        );
+        // Owner gets only: dailyRate × rentalDays (no service fee or delivery fee)
+        const dailyRate = Number(rentalData.dailyRate || 0);
+        const rentalDays = Number(rentalData.rentalDays || 1);
+        const earningsToAdd = dailyRate * rentalDays;
 
         if (earningsToAdd > 0) {
           await updateDoc(ownerRef, {
             totalEarnings: increment(earningsToAdd),
           });
-          console.log(`✅ Added ₱${earningsToAdd} to owner earnings`);
+          console.log(`✅ Added ₱${earningsToAdd} to owner earnings (${dailyRate} × ${rentalDays} days)`);
         }
       }
     }
@@ -1485,59 +1493,53 @@ const [showRentersList, setShowRentersList] = useState(false);
     </div>
 
     {/* Chat Window - Facebook Style */}
-    <div className="chat-window-container">
-      {selectedChat ? (
-        <>
-          <div className="chat-window-header">
-            <h3 className="chat-window-title">{selectedChat}</h3>
-            <button 
-              onClick={() => setSelectedChat(null)}
-              className="chat-window-close-btn"
-            >
-              ✖
-            </button>
-          </div>
-
-          <div className="chat-messages-container">
-            {messages
-              .filter(m => (m.sender === selectedChat && m.receiver === adminEmail) || (m.receiver === selectedChat && m.sender === adminEmail))
-              .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
-              .map(m => (
-                <div 
-                  key={m.id} 
-                  className={`chat-message-wrapper ${m.sender === adminEmail ? "admin" : "other"}`}
-                >
-                  <div className={`chat-message-bubble ${m.sender === adminEmail ? "admin" : "other"}`}>
-                    <p className="conversation-message-paragraph">{m.text}</p>
-                    <small className="chat-message-time">{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
-                  </div>
-                </div>
-              ))}
-          </div>
-
-          <div className="chat-input-section">
-            <input
-              type="text"
-              placeholder="Aa"
-              value={replyText[selectedChat] || ""}
-              onChange={e => setReplyText(prev => ({ ...prev, [selectedChat]: e.target.value }))}
-              onKeyDown={e => { if(e.key === "Enter") handleSendMessage(selectedChat) }}
-              className="chat-input-field"
-            />
-            <button 
-              onClick={() => handleSendMessage(selectedChat)}
-              className="chat-send-btn"
-            >
-              ➤
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="chat-window-empty">
-          Select a conversation to start chatting
+    {selectedChat && (
+      <div className="chat-window-container">
+        <div className="chat-window-header">
+          <h3 className="chat-window-title">{selectedChat}</h3>
+          <button 
+            onClick={() => setSelectedChat(null)}
+            className="chat-window-close-btn"
+          >
+            ✖
+          </button>
         </div>
-      )}
-    </div>
+
+        <div className="chat-messages-container">
+          {messages
+            .filter(m => (m.sender === selectedChat && m.receiver === adminEmail) || (m.receiver === selectedChat && m.sender === adminEmail))
+            .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+            .map(m => (
+              <div 
+                key={m.id} 
+                className={`chat-message-wrapper ${m.sender === adminEmail ? "admin" : "other"}`}
+              >
+                <div className={`chat-message-bubble ${m.sender === adminEmail ? "admin" : "other"}`}>
+                  <p className="conversation-message-paragraph">{m.text}</p>
+                  <small className="chat-message-time">{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+                </div>
+              </div>
+            ))}
+        </div>
+
+        <div className="chat-input-section">
+          <input
+            type="text"
+            placeholder="Aa"
+            value={replyText[selectedChat] || ""}
+            onChange={e => setReplyText(prev => ({ ...prev, [selectedChat]: e.target.value }))}
+            onKeyDown={e => { if(e.key === "Enter") handleSendMessage(selectedChat) }}
+            className="chat-input-field"
+          />
+          <button 
+            onClick={() => handleSendMessage(selectedChat)}
+            className="chat-send-btn"
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+    )}
   </div>
       )}
 

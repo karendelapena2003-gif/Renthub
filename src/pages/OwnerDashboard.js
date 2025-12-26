@@ -47,9 +47,12 @@ const OwnerDashboard = ({ onLogout }) => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [showIndividualEarnings, setShowIndividualEarnings] = useState(false);
   const [completedRentals, setCompletedRentals] = useState([]);
+  const [renterPhotos, setRenterPhotos] = useState({});
   const [toastMessage, setToastMessage] = useState("");
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [userPhotos, setUserPhotos] = useState({});
 
   // Comments states
   const [comments, setComments] = useState({});
@@ -368,6 +371,27 @@ useEffect(() => {
     }
   };
 
+  // Delete individual earning
+  const handleDeleteEarning = async (rentalId, amount) => {
+    if (!window.confirm("🗑️ Delete this earning? This will deduct ₱" + amount.toFixed(2) + " from your balance.")) return;
+    try {
+      await deleteDoc(doc(db, "rentals", rentalId));
+      
+      // Deduct amount from owner's balance
+      await updateDoc(doc(db, "owners", auth.currentUser.uid), {
+        totalEarnings: earnings - amount,
+      });
+      
+      setCompletedRentals(prev => prev.filter(r => r.id !== rentalId));
+      setToastMessage("✅ Earning deleted successfully");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete earning");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
+
   // Delete all completed earnings
   const handleDeleteAllEarnings = async () => {
     if (!window.confirm("🗑️ Delete all completed earnings AND reset balance to ₱0? This action cannot be undone.")) return;
@@ -406,6 +430,21 @@ useEffect(() => {
     } catch (err) {
       console.error(err);
       setToastMessage("❌ Failed to delete withdrawal history");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
+
+  // Delete individual withdrawal
+  const handleDeleteWithdrawal = async (withdrawalId) => {
+    if (!window.confirm("🗑️ Delete this withdrawal record?")) return;
+    try {
+      await deleteDoc(doc(db, "withdrawals", withdrawalId));
+      setWithdrawals(prev => prev.filter(w => w.id !== withdrawalId));
+      setToastMessage("✅ Withdrawal record deleted");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete withdrawal");
       setTimeout(() => setToastMessage(""), 3500);
     }
   };
@@ -487,12 +526,35 @@ const currentUserEmail = auth.currentUser?.email;
     const q = query(
       collection(db, "rentals"),
       where("ownerEmail", "==", ownerEmail),
-      where("status", "==", "completed")
+      where("status", "==", "Completed")
     );
     
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsub = onSnapshot(q, async (snapshot) => {
       const rentalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log("✅ Completed Rentals Found:", rentalData.length);
+      console.log("📊 Owner Email:", ownerEmail);
+      console.log("📋 Rentals Data:", rentalData);
       setCompletedRentals(rentalData);
+      
+      // Fetch renter photos
+      const photos = {};
+      for (const rental of rentalData) {
+        if (rental.renterEmail) {
+          try {
+            const usersQuery = query(
+              collection(db, "users"),
+              where("email", "==", rental.renterEmail)
+            );
+            const userSnap = await getDocs(usersQuery);
+            if (!userSnap.empty) {
+              photos[rental.renterEmail] = userSnap.docs[0].data().photoURL || "/default-profile.png";
+            }
+          } catch (err) {
+            console.error("Error fetching renter photo:", err);
+          }
+        }
+      }
+      setRenterPhotos(photos);
     });
     
     return () => unsub();
@@ -660,6 +722,62 @@ useEffect(() => {
 const conversationUsers = Array.from(
   new Set(messages.map(m => (m.sender === currentUserEmail ? m.receiver : m.sender)))
 );
+
+// Fetch profile photos for conversation users
+useEffect(() => {
+  const fetchUserPhotos = async () => {
+    const photos = {};
+    for (const email of conversationUsers) {
+      if (email && email !== "renthub-support") {
+        try {
+          const usersQuery = query(
+            collection(db, "users"),
+            where("email", "==", email)
+          );
+          const userSnap = await getDocs(usersQuery);
+          if (!userSnap.empty) {
+            photos[email] = userSnap.docs[0].data().photoURL || "/default-profile.png";
+          } else {
+            photos[email] = "/default-profile.png";
+          }
+        } catch (err) {
+          console.error("Error fetching user photo:", err);
+          photos[email] = "/default-profile.png";
+        }
+      }
+    }
+    setUserPhotos(photos);
+  };
+  
+  if (conversationUsers.length > 0) {
+    fetchUserPhotos();
+  }
+}, [conversationUsers.length]);
+
+// Mark messages as read when conversation is opened
+useEffect(() => {
+  const markMessagesAsRead = async () => {
+    if (!selectedChat || !currentUserEmail) return;
+    
+    try {
+      const unreadMessages = messages.filter(
+        m => m.sender === selectedChat && 
+             m.receiver === currentUserEmail && 
+             !m.read
+      );
+      
+      const updatePromises = unreadMessages.map(msg => 
+        updateDoc(doc(db, "messages", msg.id), { read: true })
+      );
+      
+      await Promise.all(updatePromises);
+    } catch (err) {
+      console.error("Error marking messages as read:", err);
+    }
+  };
+  
+  markMessagesAsRead();
+}, [selectedChat, currentUserEmail]);
 
 const getChatMessages = (chatUserEmail) =>
   messages
@@ -971,38 +1089,39 @@ useEffect(() => {
   {/* DASHBOARD OVERVIEW */}
 {activePage === "dashboard" && userRole === "owner" && (
   <section className="overview-owner">
-    <h2>Dashboard</h2>
+    <h2>Owner Dashboard Overview</h2>
     <div className="overview-cards">
 
       {/* Owner Profile */}
       <div className="overview-card" onClick={() => setActivePage("ownerProfile")}>
-        <h3>👤 Owner Profile</h3>
+        <h3>Owner Profile</h3>
         <p>View and edit your profile</p>
       </div>
 
       {/* Rental Items */}
       <div className="overview-card" onClick={() => setActivePage("rentalitem")}>
-        <h3>📦 Rental Items</h3>
+        <h3>Rental Items</h3>
         <p>Total: {rentals.length}</p>
+        <small>Active properties listed</small>
       </div>
 
       {/* Total Earnings */}
       <div className="overview-card" onClick={() => setActivePage("totalEarnings")}>
-        <h3>💰 Total Earnings</h3>
-        <p>Balance: ₱{balance}</p>
-        <p>Withdrawn: ₱{withdrawn}</p>
+        <h3>Total Earnings</h3>
+        <p>Balance: ₱{balance.toFixed(2)}</p>
+        <small>Withdrawn: ₱{withdrawn.toFixed(2)}</small>
       </div>
 
-            {/* Messages */}
+      {/* Messages */}
       <div className="overview-card" onClick={() => setActivePage("messages")}>
-        <h3>📩 Messages</h3>
-        <p>Total: {conversationUsers.length}</p>
+        <h3>Messages</h3>
+        <p>Conversations: {conversationUsers.length}</p>
       </div>
 
       {/* Add Rental Item */}
       <div className="overview-card" onClick={() => setActivePage("addrentalitem")}>
-        <h3>➕ Add Rental Item</h3>
-        <p>Add new rentals here</p>
+        <h3>Add Rental Item</h3>
+        <p>Create new listing</p>
       </div>
 
     </div>
@@ -1013,12 +1132,12 @@ useEffect(() => {
  {/* TOTAL EARNINGS */}
 {activePage === "totalEarnings" && userRole === "owner" && (
   <section className="totalearnings-owner">
-    <h2>💰 Total Earnings</h2>
+    <h2>Total Earnings</h2>
 
     {/* Balance Section */}
     <div className="balance-section">
       <div className="balance-card">
-        <p className="balance-label">💵 Current Balance</p>
+        <p className="balance-label">Current Balance</p>
         <p className="balance-amount">₱{balance.toFixed(2)}</p>
         <p className="balance-withdrawn">Withdrawn: ₱{withdrawn.toFixed(2)}</p>
       </div>
@@ -1026,18 +1145,18 @@ useEffect(() => {
 
     {/* Withdraw Funds Section */}
     <div className="withdraw-section">
-      <h3>💳 Withdraw Funds</h3>
+      <h3>Withdraw Funds</h3>
       
       <button
         className="withdraw-btn"
         onClick={() => setShowWithdrawForm(prev => !prev)}
         disabled={balance < 500}
       >
-        {showWithdrawForm ? "❌ Cancel" : "💸 Withdraw Now"}
+        {showWithdrawForm ? "Cancel" : "Withdraw Now"}
       </button>
 
       {balance < 500 && (
-        <p className="withdraw-info">⚠️ Minimum balance of ₱500 needed to withdraw</p>
+        <p className="withdraw-info">Minimum balance of ₱500 needed to withdraw</p>
       )}
 
       {/* Withdraw Form */}
@@ -1063,8 +1182,8 @@ useEffect(() => {
               required
             >
               <option value="">-- Select Payment Method --</option>
-              <option value="GCash">💚 GCash</option>
-              <option value="PayMaya">💙 PayMaya</option>
+              <option value="GCash">GCash</option>
+              <option value="PayMaya">PayMaya</option>
             </select>
           </div>
 
@@ -1096,7 +1215,7 @@ useEffect(() => {
               disabled={balance < 500 || !withdrawMethod || !withdrawAccountName || !withdrawPhone} 
               onClick={handleWithdraw}
             >
-              ✅ Confirm Withdrawal
+               Confirm Withdrawal
             </button>
             <button 
               className="cancel-btn"
@@ -1116,9 +1235,15 @@ useEffect(() => {
 
     {/* Withdrawal History Section */}
     <div className="withdrawal-history-section">
-      <h3>📋 Withdrawal History</h3>
-      <button className="toggle-btn" onClick={toggleWithdrawals}>
-        {showWithdrawals ? "🔽 Hide Withdrawal History" : "▶️ Show Withdrawal History"}
+      <h3>Withdrawal History</h3>
+      <button 
+        className="toggle-btn" 
+        onClick={toggleWithdrawals}
+        style={{
+          backgroundColor: showWithdrawals ? '#9e9e9e' : '#2196F3'
+        }}
+      >
+        {showWithdrawals ? "Hide Withdrawal History" : "Show Withdrawal History"}
       </button>
 
       {showWithdrawals && (
@@ -1127,23 +1252,15 @@ useEffect(() => {
             <p className="empty-message">📭 No withdrawal history yet.</p>
           ) : (
             <>
-              {/* Delete All Withdrawals Button */}
-              <button 
-                onClick={handleDeleteAllWithdrawals}
-                className="delete-all-earnings-btn"
-              >
-                🗑️ Delete All Withdrawal History
-              </button>
-
               {withdrawals
                 .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
                 .map(w => (
                   <div key={w.id} className="withdrawal-item">
                     <div className="withdrawal-header">
                       <span className={`status-badge ${w.status}`}>
-                        {w.status === "approved" && "✅ Approved"}
-                        {w.status === "pending" && "⏳ Pending"}
-                        {w.status === "rejected" && "❌ Rejected"}
+                        {w.status === "approved" && "Approved"}
+                        {w.status === "pending" && "Pending"}
+                        {w.status === "rejected" && "Rejected"}
                       </span>
                       <span className="withdrawal-date">
                         {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : "N/A"}
@@ -1151,22 +1268,30 @@ useEffect(() => {
                     </div>
                     <div className="withdrawal-details">
                       <div className="detail-row">
-                        <strong>💵 Amount:</strong>
+                        <strong>Amount:</strong>
                         <span>₱{Number(w.amount || 0).toFixed(2)}</span>
                       </div>
                       <div className="detail-row">
-                        <strong>💳 Method:</strong>
+                        <strong>Method:</strong>
                         <span>{w.method || "N/A"}</span>
                       </div>
                       <div className="detail-row">
-                        <strong>👤 Account:</strong>
+                        <strong>Account:</strong>
                         <span>{w.accountName || "N/A"}</span>
                       </div>
                       <div className="detail-row">
-                        <strong>📱 Phone:</strong>
+                        <strong>Phone:</strong>
                         <span>{w.phone || "N/A"}</span>
                       </div>
                     </div>
+                    
+                    {/* Delete Button */}
+                    <button 
+                      className="delete-withdrawal-btn"
+                      onClick={() => handleDeleteWithdrawal(w.id)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ))
               }
@@ -1178,37 +1303,16 @@ useEffect(() => {
 
     {/* Individual Earnings Section */}
     <div className="individual-earnings-section">
-      <h3>📈 Individual Earnings</h3>
+      <h3>Individual Earnings</h3>
       <button className="toggle-btn" onClick={() => setShowIndividualEarnings(prev => !prev)}>
-        {showIndividualEarnings ? "🔽 Hide Individual Earnings" : "▶️ Show Individual Earnings"}
+        {showIndividualEarnings ? "Hide Individual Earnings" : "Show Individual Earnings"}
       </button>
 
       {showIndividualEarnings && (
         <div className="earnings-list">
-          {/* Current Balance Summary */}
-          <div className="earnings-summary">
-            <h4>💰 Current Balance</h4>
-            <div className="summary-details">
-              <div className="summary-row">
-                <span>Total Balance:</span>
-                <strong>₱{balance.toFixed(2)}</strong>
-              </div>
-              <div className="summary-row">
-                <span>Completed Rentals:</span>
-                <strong>{completedRentals.length} {completedRentals.length === 1 ? 'rental' : 'rentals'}</strong>
-              </div>
-              {completedRentals.length > 0 && (
-                <div className="summary-row">
-                  <span>Total from Rentals:</span>
-                  <strong>₱{completedRentals.reduce((sum, r) => sum + Number(r.price || 0), 0).toFixed(2)}</strong>
-                </div>
-              )}
-            </div>
-          </div>
-
           {completedRentals.length === 0 ? (
             <div className="empty-earnings">
-              <p className="empty-message">📭 No completed rentals yet.</p>
+              <p className="empty-message">No completed rentals yet.</p>
               <p className="empty-hint">Your rental earnings will appear here one-by-one when admin completes rentals.</p>
             </div>
           ) : (
@@ -1218,47 +1322,77 @@ useEffect(() => {
                 onClick={handleDeleteAllEarnings}
                 className="delete-all-earnings-btn"
               >
-                🗑️ Clear All Earnings History
+                 Clear All Earnings History
               </button>
 
               {/* Individual Earnings Items */}
               <div className="earnings-items-container">
-                <h4>💵 Earnings Added ({completedRentals.length})</h4>
-                <p className="earnings-hint">View each rental that was completed and added to your balance:</p>
+                <h4>Completed Earnings ({completedRentals.length})</h4>
+                <p className="earnings-hint">Each rental completed by admin:</p>
                 {completedRentals
                   .sort((a, b) => (b.completedAt?.seconds || 0) - (a.completedAt?.seconds || 0))
                   .map((rental, index) => (
                     <div key={rental.id} className="earnings-item">
                       <div className="earnings-item-header">
-                        <span className="earnings-number">#{completedRentals.length - index}</span>
-                        <span className="earnings-date">
-                          {rental.completedAt?.toDate 
-                            ? rental.completedAt.toDate().toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric', 
-                                year: 'numeric'
-                              })
-                            : "N/A"}
-                        </span>
+                        <span className="status-badge completed">✅ Completed</span>
                       </div>
+                      
+                      {/* Property Image */}
+                      {(rental.propertyImage || rental.imageUrl) && (
+                        <div className="earnings-image-container">
+                          <img src={rental.propertyImage || rental.imageUrl} alt={rental.propertyName || rental.name} className="earnings-property-image" />
+                        </div>
+                      )}
+                      
                       <div className="earnings-details">
                         <div className="detail-row">
-                          <strong>🏠 Property:</strong>
-                          <span>{rental.name || "N/A"}</span>
+                          <strong>Property:</strong>
+                          <span>{rental.propertyName || rental.name || "N/A"}</span>
                         </div>
                         <div className="detail-row highlight">
-                          <strong>💵 Added Amount:</strong>
-                          <span className="price-highlight">₱{Number(rental.price || 0).toFixed(2)}</span>
+                          <strong>Earned Amount:</strong>
+                          <span className="price-highlight">₱{(Number(rental.dailyRate || 0) * Number(rental.rentalDays || 1)).toFixed(2)}</span>
                         </div>
                         <div className="detail-row">
-                          <strong>👤 Renter:</strong>
-                          <span>{rental.renterEmail || "N/A"}</span>
+                          <strong>Renter:</strong>
+                          <div className="renter-info">
+                            {renterPhotos[rental.renterEmail] && (
+                              <img src={renterPhotos[rental.renterEmail]} alt="Renter" className="renter-photo" />
+                            )}
+                            <span>{rental.renterEmail || "N/A"}</span>
+                          </div>
                         </div>
                         <div className="detail-row">
-                          <strong>✅ Status:</strong>
-                          <span className="status-badge completed">Completed</span>
+                          <strong>Completed:</strong>
+                          <span>
+                            {rental.completedAt?.toDate 
+                              ? rental.completedAt.toDate().toLocaleString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : (rental.createdAt?.toDate 
+                                ? rental.createdAt.toDate().toLocaleString('en-US', { 
+                                    month: 'short', 
+                                    day: 'numeric', 
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : "N/A")}
+                          </span>
                         </div>
                       </div>
+                      
+                      {/* Delete Button */}
+                      <button 
+                        className="delete-earning-btn"
+                        onClick={() => handleDeleteEarning(rental.id, Number(rental.dailyRate || 0) * Number(rental.rentalDays || 1))}
+                      >
+                         Delete
+                      </button>
                     </div>
                   ))}
               </div>
@@ -1276,33 +1410,100 @@ useEffect(() => {
  {/* MESSAGES */}
 {activePage === "messages" && userRole === "owner" && (
   <section className="messages-owner">
-    <h2>📩 Messages</h2>
-    <div className="messages-container">
+    <h2>Messages</h2>
+    <div className={`messages-container ${selectedChat ? "chat-open" : "no-chat"}`}>
       
       {/* Conversation List */}
       <div className="conversation-list">
         <h3>Conversations</h3>
+        
+        {/* Search Bar */}
+        <div className="messages-search-box">
+          <span>🔍</span>
+          <input
+            type="text"
+            className="messages-search-input"
+            placeholder="Search conversations..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
         
         {/* Regular Conversations */}
         {conversationUsers.length === 0 ? (
           <p className="no-messages-text">No renter messages yet.</p>
         ) : (
           conversationUsers
-            .filter(user => user !== "renthub-support") // Remove renthub-support
+            .filter(user => user !== "renthub-support")
             .filter(user => messages.some(m => 
               ((m.sender === ownerEmail && m.receiver === user) || 
                (m.sender === user && m.receiver === ownerEmail)) && 
               !m.isAdminReply
             ))
-            .map(user => (
-            <div
-              key={user}
-              className={`conversation-item ${selectedChat === user ? "active" : ""}`}
-              onClick={() => setSelectedChat(user)}
-            >
-              {user}
-            </div>
-          ))
+            .filter(user => {
+              if (!searchTerm) return true;
+              const userMessages = messages.filter(m =>
+                (m.sender === user && m.receiver === ownerEmail) ||
+                (m.sender === ownerEmail && m.receiver === user)
+              );
+              const lastMessage = userMessages[userMessages.length - 1];
+              return (
+                user.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (lastMessage?.text || "").toLowerCase().includes(searchTerm.toLowerCase())
+              );
+            })
+            .map(user => {
+              const userMessages = messages.filter(m =>
+                (m.sender === user && m.receiver === ownerEmail) ||
+                (m.sender === ownerEmail && m.receiver === user)
+              );
+              const lastMessage = userMessages[userMessages.length - 1];
+              const unreadCount = userMessages.filter(m => 
+                m.sender === user && m.receiver === ownerEmail && !m.read
+              ).length;
+              
+              return (
+                <div
+                  key={user}
+                  className={`conversation-item ${selectedChat === user ? "active" : ""}`}
+                  onClick={() => setSelectedChat(user)}
+                >
+                  {/* Avatar */}
+                  <div className="conversation-avatar">
+                    {userPhotos[user] ? (
+                      <img src={userPhotos[user]} alt={user} />
+                    ) : (
+                      <span>{user.charAt(0).toUpperCase()}</span>
+                    )}
+                  </div>
+                  
+                  {/* Preview */}
+                  <div className="conversation-preview">
+                    <div className="conversation-email">{user}</div>
+                    <div className="conversation-preview-text">
+                      {lastMessage?.text || "No messages yet"}
+                    </div>
+                  </div>
+                  
+                  {/* Unread Badge */}
+                  {unreadCount > 0 && (
+                    <span className="conversation-badge">{unreadCount}</span>
+                  )}
+                  
+                  {/* Delete Button */}
+                  <button
+                    className="conversation-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteConversation(user);
+                    }}
+                    title="Delete conversation"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              );
+            })
         )}
       </div>
 
@@ -1311,17 +1512,9 @@ useEffect(() => {
         {selectedChat ? (
           <>
             <div className="chat-header">
-              <h3>
-                Chat with {selectedChat}
-              </h3>
-              <div className="chat-header-actions">
-                <button onClick={() => handleDeleteConversation(selectedChat)}>🗑 Delete</button>
-                <button onClick={() => setSelectedChat(null)}>✖ Close</button>
-              </div>
+              <h3>Chat with {selectedChat}</h3>
+              <button className="close-chat-btn" onClick={() => setSelectedChat(null)}>✖</button>
             </div>
-
-            {/* Welcome Message for Support */}
-            {/* Removed RentHub Support AI welcome message */}
 
             {/* Chat Messages */}
             <div className="chat-messages">
@@ -1331,7 +1524,7 @@ useEffect(() => {
                     (m.sender === ownerEmail && m.receiver === selectedChat) ||
                     (m.sender === selectedChat && m.receiver === ownerEmail)
                 )
-                .filter(m => !m.isAdminReply) // Exclude admin replies from regular chats
+                .filter(m => !m.isAdminReply)
                 .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
                 .map(m => (
                   <div
@@ -1383,7 +1576,9 @@ useEffect(() => {
             </div>
           </>
         ) : (
-          <p>Select a conversation to start chatting.</p>
+          <div className="no-chat-selected-container">
+            <p className="no-chat-selected">Select a conversation to start chatting.</p>
+          </div>
         )}
       </div>
     </div>

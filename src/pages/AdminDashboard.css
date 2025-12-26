@@ -2028,6 +2028,13 @@ body {
   background: #fff;
 }
 
+/* Expand list when no chat is open */
+.messages-page-container:not(.chat-open) .conversation-list {
+  flex: 0 1 520px;
+  max-width: 520px;
+  width: 100%;
+}
+
 /* Medium screens / split-view: tighten search box and list width */
 @media (max-width: 1100px) {
   .messages-title { font-size: 26px; }
