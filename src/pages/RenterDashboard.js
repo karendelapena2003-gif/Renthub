@@ -1740,13 +1740,41 @@ useEffect(() => {
           <input type="number" name="dailyRate" value={rentalForm.dailyRate.toFixed(2)} readOnly />
 
           <label>Rental Duration (days)</label>
-          <input
-            type="number"
-            name="rentalDays"
-            min={1}
-            value={rentalForm.rentalDays}
-            onChange={handleFormChange}
-          />
+          <div className="quantity-selector">
+            <button
+              type="button"
+              className="qty-btn qty-btn-minus"
+              onClick={() => {
+                if (rentalForm.rentalDays > 1) {
+                  handleFormChange({
+                    target: { name: 'rentalDays', value: rentalForm.rentalDays - 1, type: 'number' }
+                  });
+                }
+              }}
+              disabled={rentalForm.rentalDays <= 1}
+            >
+              −
+            </button>
+            <input
+              type="number"
+              className="qty-input"
+              name="rentalDays"
+              min={1}
+              value={rentalForm.rentalDays}
+              onChange={handleFormChange}
+            />
+            <button
+              type="button"
+              className="qty-btn qty-btn-plus"
+              onClick={() => {
+                handleFormChange({
+                  target: { name: 'rentalDays', value: rentalForm.rentalDays + 1, type: 'number' }
+                });
+              }}
+            >
+              +
+            </button>
+          </div>
 
           <p><strong>Service Fee:</strong> ₱{rentalForm.serviceFee.toFixed(2)}</p>
           <p><strong>Delivery Fee:</strong> ₱{rentalForm.deliveryFee.toFixed(2)}</p>
