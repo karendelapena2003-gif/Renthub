@@ -704,6 +704,8 @@ const [showRentersList, setShowRentersList] = useState(false);
       const updates = {
         blocked: !isBlocked,
         blockedAt: !isBlocked ? serverTimestamp() : null,
+        deleted: false, // Clear deleted status when unblocking
+        deletedAt: null,
       };
 
       await Promise.all([
@@ -711,12 +713,25 @@ const [showRentersList, setShowRentersList] = useState(false);
         setDoc(doc(db, user.role === "owner" ? "owners" : "renters", user.uid), updates, { merge: true }).catch(() => {}),
       ]);
 
+      // Update blockedUsers state immediately
       setBlockedUsers((prev) => {
         if (isBlocked) return prev.filter((id) => id !== user.uid);
         return Array.from(new Set([...prev, user.uid]));
       });
 
-      setSelectedUser({ ...user, blocked: !isBlocked });
+      setSelectedUser({ ...user, blocked: !isBlocked, deleted: false });
+      
+      // Show success message
+      if (isBlocked) {
+        setToastMessage("✅ User unblocked successfully");
+        // Auto-close blocklist modal after unblock (like Messenger)
+        setTimeout(() => {
+          setActiveBlocklist(false);
+        }, 800);
+      } else {
+        setToastMessage("⚠️ User blocked");
+      }
+      setTimeout(() => setToastMessage(""), 2500);
     } catch (err) {
       console.error("Failed to toggle block", err);
       setToastMessage("❌ Failed to update block status");
@@ -855,6 +870,13 @@ const [showRentersList, setShowRentersList] = useState(false);
                     <div key={uid} className="blocked-user-item">
                       <span>{user.email} ({user.role})</span>
                       <button onClick={() => handleBlockUser(user)}>Unblock</button>
+                      <button 
+                        onClick={() => handleDeleteUser(user)} 
+                        className="blocklist-delete-btn"
+                        title="Delete User"
+                      >
+                        🗑
+                      </button>
                     </div>
                   );
                 })
