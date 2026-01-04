@@ -1313,8 +1313,35 @@
   background: #f9f9f9;
 }
 
-.renter-dashboard .chat-bubble {
+.renter-dashboard .chat-bubble-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
   max-width: 70%;
+}
+
+.renter-dashboard .chat-bubble-container.sent {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.renter-dashboard .chat-bubble-container.received {
+  align-self: flex-start;
+  flex-direction: row;
+}
+
+.renter-dashboard .chat-bubble-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.renter-dashboard .chat-bubble {
+  max-width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
   word-wrap: break-word;
@@ -1324,15 +1351,13 @@
 .renter-dashboard .chat-bubble.sent {
   background: #4CAF50;
   color: white;
-  align-self: flex-end;
-  border-bottom-right-radius: 0;
+  border-bottom-right-radius: 4px;
 }
 
 .renter-dashboard .chat-bubble.received {
   background: #e0e0e0;
   color: #333;
-  align-self: flex-start;
-  border-bottom-left-radius: 0;
+  border-bottom-left-radius: 4px;
 }
 
 .renter-dashboard .chat-bubble small {
@@ -1741,8 +1766,18 @@
     padding: 16px;
   }
 
-  .renter-dashboard .chat-bubble {
+  .renter-dashboard .chat-bubble-container {
     max-width: 85%;
+  }
+
+  .renter-dashboard .chat-bubble {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .renter-dashboard .chat-bubble-avatar {
+    width: 28px;
+    height: 28px;
   }
 
   .renter-dashboard #rental-map {
@@ -1800,4 +1835,156 @@
 .renter-dashboard button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ===============================
+   RETURN PROOF MODAL - RESPONSIVE
+================================ */
+.renter-dashboard .return-proof-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.renter-dashboard .return-description-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color 0.3s ease;
+}
+
+.renter-dashboard .return-description-textarea:focus {
+  outline: none;
+  border-color: #5fabc0;
+  box-shadow: 0 0 0 3px rgba(95, 171, 192, 0.1);
+}
+
+.renter-dashboard .return-proof-preview {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.renter-dashboard .return-proof-preview p {
+  margin-bottom: 10px;
+  font-weight: 500;
+  color: #555;
+}
+
+.renter-dashboard .proof-preview-image {
+  max-width: 100%;
+  height: auto;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Laptop - Full Screen (1024px and above) */
+@media (min-width: 1024px) {
+  .renter-dashboard .return-proof-form {
+    padding: 20px;
+  }
+
+  .renter-dashboard .return-description-textarea {
+    font-size: 15px;
+    padding: 14px;
+    min-height: 120px;
+  }
+
+  .renter-dashboard .proof-preview-image {
+    max-height: 400px;
+  }
+
+  .renter-dashboard .rental-modal {
+    max-width: 600px;
+  }
+}
+
+/* Laptop - Split Screen / Tablet (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .renter-dashboard .return-proof-form {
+    padding: 15px;
+  }
+
+  .renter-dashboard .return-description-textarea {
+    font-size: 14px;
+    padding: 12px;
+    min-height: 100px;
+  }
+
+  .renter-dashboard .proof-preview-image {
+    max-height: 300px;
+  }
+
+  .renter-dashboard .rental-modal {
+    max-width: 90%;
+    margin: 20px auto;
+  }
+}
+
+/* Mobile Phone (Below 768px) */
+@media (max-width: 767px) {
+  .renter-dashboard .return-proof-form {
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .renter-dashboard .return-description-textarea {
+    font-size: 14px;
+    padding: 10px;
+    min-height: 90px;
+  }
+
+  .renter-dashboard .proof-preview-image {
+    max-height: 250px;
+    max-width: 100%;
+  }
+
+  .renter-dashboard .rental-modal {
+    max-width: 95%;
+    margin: 10px auto;
+    padding: 16px;
+  }
+
+  .renter-dashboard .return-proof-form label {
+    font-size: 13px;
+  }
+
+  .renter-dashboard .form-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .renter-dashboard .form-buttons button {
+    width: 100%;
+  }
+}
+
+/* Extra Small Mobile (Below 480px) */
+@media (max-width: 480px) {
+  .renter-dashboard .return-description-textarea {
+    font-size: 13px;
+    padding: 8px;
+    min-height: 80px;
+  }
+
+  .renter-dashboard .proof-preview-image {
+    max-height: 200px;
+  }
+
+  .renter-dashboard .rental-modal-overlay {
+    padding: 5px;
+  }
+
+  .renter-dashboard .rental-modal {
+    max-width: 100%;
+    margin: 5px;
+    padding: 12px;
+  }
 }

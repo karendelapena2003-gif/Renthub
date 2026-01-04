@@ -51,6 +51,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [lastReadByOwner, setLastReadByOwner] = useState({}); // per-owner last read timestamp
   const [showMessageSettings, setShowMessageSettings] = useState(false);
   const [showTransactionSettings, setShowTransactionSettings] = useState(false);
+  const [userPhotos, setUserPhotos] = useState({}); // Store user profile photos
 
   /* ---------------- UI/navigation ---------------- */
   const [activePage, setActivePage] = useState("dashboard");
@@ -194,10 +195,27 @@ const AdminDashboard = ({ onLogout }) => {
         console.warn("updateProfile failed:", e);
       }
 
-      // Update users collection
+      // Update users collection with COMPLETE profile data including email & role
       try {
-        await updateDoc(doc(db, "users", adminUser.uid), { displayName, photoURL, updatedAt: serverTimestamp() });
-      } catch {}
+        await updateDoc(doc(db, "users", adminUser.uid), { 
+          email: adminUser.email,
+          displayName, 
+          photoURL, 
+          role: "admin",
+          updatedAt: serverTimestamp() 
+        });
+      } catch (updateErr) {
+        // If document doesn't exist, create it with setDoc
+        console.log("⚠️ updateDoc failed, using setDoc fallback:", updateErr);
+        await setDoc(doc(db, "users", adminUser.uid), {
+          email: adminUser.email,
+          displayName,
+          photoURL,
+          role: "admin",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
 
       // Update GCash info in settings/gcash
       try {
@@ -476,18 +494,18 @@ const adminEmail = adminUser?.email;
     }
   }, [adminEmail, lastReadByOwner]);
 
-// Listen for admin-owner messages only
+// Listen for admin-owner and admin-renter messages
 useEffect(() => {
   if (!adminEmail) return;
 
   const unsub = onSnapshot(collection(db, "messages"), (snap) => {
     const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Filter only messages involving admin & owners
+    // Filter messages involving admin with both owners & renters
     const filtered = all.filter(
       m =>
-        (m.sender === adminEmail && m.receiverRole === "owner") ||
-        (m.receiver === adminEmail && m.senderRole === "owner")
+        (m.sender === adminEmail && (m.receiverRole === "owner" || m.receiverRole === "renter")) ||
+        (m.receiver === adminEmail && (m.senderRole === "owner" || m.senderRole === "renter"))
     );
 
     // Sort newest first
@@ -498,6 +516,50 @@ useEffect(() => {
 
   return () => unsub();
 }, [adminEmail]);
+
+// Fetch profile photos for conversation users (owners and renters)
+useEffect(() => {
+  const conversationEmails = Array.from(
+    new Set(messages
+      .filter(m => m.senderRole === "admin" || m.receiverRole === "admin")
+      .flatMap(m => m.senderRole === "admin" ? [m.receiver] : [m.sender])
+    )
+  );
+
+  if (conversationEmails.length === 0) return;
+
+  const fetchUserPhotos = async () => {
+    const photos = {};
+    for (const email of conversationEmails) {
+      if (email && email !== adminEmail) {
+        try {
+          console.log("🔍 [Admin] Fetching photo for:", email);
+          const usersQuery = query(
+            collection(db, "users"),
+            where("email", "==", email)
+          );
+          const userSnap = await getDocs(usersQuery);
+          if (!userSnap.empty) {
+            const userData = userSnap.docs[0].data();
+            const photoURL = userData.photoURL;
+            photos[email] = photoURL || null;
+            console.log("✅ [Admin] Photo found for", email, ":", photoURL);
+          } else {
+            console.log("⚠️ [Admin] No user document found in Firestore for:", email);
+            photos[email] = null;
+          }
+        } catch (err) {
+          console.error("❌ [Admin] Error fetching user photo for", email, ":", err);
+          photos[email] = null;
+        }
+      }
+    }
+    console.log("📸 [Admin] All user photos fetched:", photos);
+    setUserPhotos(photos);
+  };
+
+  fetchUserPhotos();
+}, [messages, adminEmail]);
 
 // Send message from admin to owner
 const handleAdminSendMessage = async (ownerEmail) => {
@@ -591,6 +653,20 @@ const handleSendMessage = async (ownerEmail) => {
   } catch (err) {
     console.error(err);
     alert("Failed to send message");
+  }
+};
+
+const handleDeleteMessage = async (messageId) => {
+  if (!window.confirm("Delete this message?")) return;
+  
+  try {
+    await deleteDoc(doc(db, "messages", messageId));
+    setToastMessage("✅ Message deleted");
+    setTimeout(() => setToastMessage(""), 2000);
+  } catch (err) {
+    console.error(err);
+    setToastMessage("❌ Failed to delete message");
+    setTimeout(() => setToastMessage(""), 3000);
   }
 };
 
@@ -1448,7 +1524,7 @@ const [showRentersList, setShowRentersList] = useState(false);
           </div>
         </div>
         <div className="messages-search-box">
-          <span>🔍</span>
+          <span></span>
           <input
             type="text"
             placeholder="Search email"
@@ -1469,37 +1545,37 @@ const [showRentersList, setShowRentersList] = useState(false);
           const lastB = messages.filter(m => (m.sender === b && m.receiver === adminEmail) || (m.receiver === b && m.sender === adminEmail)).pop();
           return (lastB?.createdAt?.seconds || 0) - (lastA?.createdAt?.seconds || 0);
         })
-        .map(ownerEmail => {
+        .map(userEmail => {
           const lastMsg = messages
-            .filter(m => (m.sender === ownerEmail && m.receiver === adminEmail) || (m.receiver === ownerEmail && m.sender === adminEmail))
+            .filter(m => (m.sender === userEmail && m.receiver === adminEmail) || (m.receiver === userEmail && m.sender === adminEmail))
             .pop();
-          const ownerUser = owners.find(o => o.email === ownerEmail);
-          const lastReadTs = lastReadByOwner[ownerEmail] || 0;
+          const user = [...owners, ...renters].find(u => u.email === userEmail);
+          const lastReadTs = lastReadByOwner[userEmail] || 0;
           const unreadCount = messages.filter(m => (
-            m.sender === ownerEmail &&
+            m.sender === userEmail &&
             m.receiver === adminEmail &&
             (m.createdAt?.seconds || 0) > lastReadTs
           )).length;
           return (
             <div
-              key={ownerEmail}
+              key={userEmail}
               onClick={() => {
-                setSelectedChat(ownerEmail);
-                markChatRead(ownerEmail);
+                setSelectedChat(userEmail);
+                markChatRead(userEmail);
               }}
-              className={`conversation-item ${selectedChat === ownerEmail ? "active" : ""}`}
-              onMouseEnter={e => !selectedChat === ownerEmail && (e.currentTarget.style.background = "#f0f2f5")}
-              onMouseLeave={e => !selectedChat === ownerEmail && (e.currentTarget.style.background = "#fff")}
+              className={`conversation-item ${selectedChat === userEmail ? "active" : ""}`}
+              onMouseEnter={e => !selectedChat === userEmail && (e.currentTarget.style.background = "#f0f2f5")}
+              onMouseLeave={e => !selectedChat === userEmail && (e.currentTarget.style.background = "#fff")}
             >
               <div className="conversation-avatar">
-                {ownerUser?.photoURL ? (
-                  <img src={ownerUser.photoURL} alt={ownerUser.displayName || ownerEmail} />
+                {userPhotos[userEmail] ? (
+                  <img src={userPhotos[userEmail]} alt={user?.displayName || userEmail} />
                 ) : (
-                  ownerEmail.charAt(0).toUpperCase()
+                  <span>{userEmail.charAt(0).toUpperCase()}</span>
                 )}
               </div>
               <div className="conversation-preview">
-                <div className="conversation-email">{ownerEmail}</div>
+                <div className="conversation-email">{userEmail}</div>
                 <div className={`conversation-last-msg ${unreadCount > 0 ? "unread" : ""}`}>
                   {lastMsg?.text || "No messages"}
                 </div>
@@ -1531,17 +1607,58 @@ const [showRentersList, setShowRentersList] = useState(false);
           {messages
             .filter(m => (m.sender === selectedChat && m.receiver === adminEmail) || (m.receiver === selectedChat && m.sender === adminEmail))
             .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
-            .map(m => (
-              <div 
-                key={m.id} 
-                className={`chat-message-wrapper ${m.sender === adminEmail ? "admin" : "other"}`}
-              >
-                <div className={`chat-message-bubble ${m.sender === adminEmail ? "admin" : "other"}`}>
-                  <p className="conversation-message-paragraph">{m.text}</p>
-                  <small className="chat-message-time">{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+            .map(m => {
+              console.log(" [Admin] Rendering message from:", m.sender, "| userPhotos:", userPhotos);
+              return (
+                <div
+                  key={m.id}
+                  className={`chat-bubble-container ${m.sender === adminEmail ? "sent" : "received"}`}
+                >
+                  {/* Profile Photo for received messages (owner/renter) */}
+                  {m.sender !== adminEmail && (
+                    <img 
+                      src={userPhotos[m.sender] || "/default-profile.png"} 
+                      alt={m.sender}
+                      className="chat-bubble-avatar"
+                      onError={(e) => {
+                        console.log("❌ [Admin] Image load failed for:", m.sender, "| URL:", userPhotos[m.sender]);
+                        e.target.src = "/default-profile.png";
+                      }}
+                    />
+                  )}
+                  
+                  <div className="chat-bubble-with-delete">
+                    <div className={`chat-bubble ${m.sender === adminEmail ? "sent" : "received"}`}>
+                      <p className="chat-message-text">{m.text}</p>
+                      <small className="chat-message-time">
+                        {m.createdAt?.toDate
+                          ? m.createdAt.toDate().toLocaleTimeString()
+                          : new Date().toLocaleTimeString()}
+                      </small>
+                    </div>
+                    <button 
+                      className="message-delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteMessage(m.id);
+                      }}
+                      title="Delete message"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                  
+                  {/* Admin Photo for sent messages */}
+                  {m.sender === adminEmail && (
+                    <img 
+                      src={photoPreview || "/default-profile.png"} 
+                      alt="Admin"
+                      className="chat-bubble-avatar"
+                    />
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
 
         <div className="chat-input-section">

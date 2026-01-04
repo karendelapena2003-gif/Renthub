@@ -53,6 +53,8 @@ const OwnerDashboard = ({ onLogout }) => {
   const [messageLoading, setMessageLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [userPhotos, setUserPhotos] = useState({});
+  const [adminPhoto, setAdminPhoto] = useState("");
+  const [adminDisplayName, setAdminDisplayName] = useState("");
 
   // Comments states
   const [comments, setComments] = useState({});
@@ -654,9 +656,10 @@ const handleWithdraw = async () => {
     updateOldWithdrawalsWithEmails();
   }, []);
 
-
+// ✅ Single message listener for owner
 useEffect(() => {
   if (!ownerEmail) return;
+  console.log("🔍 [Owner] Setting up message listener for:", ownerEmail);
 
   const q = query(
     collection(db, "messages"),
@@ -671,6 +674,7 @@ useEffect(() => {
       m => m.sender?.toLowerCase() === ownerEmail.toLowerCase() || m.receiver?.toLowerCase() === ownerEmail.toLowerCase()
     );
 
+    console.log("✅ [Owner] Filtered messages:", ownerMessages.length, "total messages");
     setMessages(ownerMessages);
   });
 
@@ -692,67 +696,81 @@ useEffect(() => {
     const snapshot = await getDocs(collection(db, "users"));
     const usersData = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(u => u.email !== currentUserEmail); // exclude self
+      .filter(u => u.email !== ownerEmail); // exclude self
     setAllUsers(usersData);
   };
   fetchUsers();
-}, [currentUserEmail]);
-
-useEffect(() => {
-  if (!currentUserEmail) return;
-
-  const q = query(
-    collection(db, "messages"),
-    orderBy("createdAt", "asc")
-  );
-
-  const unsub = onSnapshot(q, (snapshot) => {
-    const allMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const userMessages = allMessages.filter(
-      m => m.sender?.toLowerCase() === currentUserEmail.toLowerCase() ||
-           m.receiver?.toLowerCase() === currentUserEmail.toLowerCase()
-    );
-    setMessages(userMessages);
-  });
-
-  return () => unsub();
-}, [currentUserEmail]);
+}, [ownerEmail]);
 
 
+// ✅ Get unique conversation partners (excluding owner themselves)
 const conversationUsers = Array.from(
-  new Set(messages.map(m => (m.sender === currentUserEmail ? m.receiver : m.sender)))
-);
+  new Set(messages.map(m => (m.sender === ownerEmail ? m.receiver : m.sender)))
+).filter(email => email && email.toLowerCase() !== ownerEmail.toLowerCase());
 
-// Fetch profile photos for conversation users
+console.log("💬 [Owner] Conversation users:", conversationUsers);
+
+// Fetch profile photos for conversation users (including admin and renters)
 useEffect(() => {
   const fetchUserPhotos = async () => {
     const photos = {};
     for (const email of conversationUsers) {
+      // Fetch all conversation users except support system
       if (email && email !== "renthub-support") {
         try {
+          console.log("🔍 Fetching photo for:", email);
           const usersQuery = query(
             collection(db, "users"),
             where("email", "==", email)
           );
           const userSnap = await getDocs(usersQuery);
           if (!userSnap.empty) {
-            photos[email] = userSnap.docs[0].data().photoURL || "/default-profile.png";
+            const userData = userSnap.docs[0].data();
+            const photoURL = userData.photoURL;
+            photos[email] = photoURL || "/default-profile.png";
+            console.log("✅ Photo found for", email, ":", photoURL);
           } else {
+            console.log("⚠️ No user document found in Firestore for:", email);
             photos[email] = "/default-profile.png";
           }
         } catch (err) {
-          console.error("Error fetching user photo:", err);
+          console.error("❌ Error fetching user photo for", email, ":", err);
           photos[email] = "/default-profile.png";
         }
       }
     }
+    console.log("📸 All user photos fetched:", photos);
     setUserPhotos(photos);
   };
   
   if (conversationUsers.length > 0) {
     fetchUserPhotos();
   }
-}, [conversationUsers.length]);
+}, [JSON.stringify(conversationUsers)]);
+
+// Fetch admin profile information from admin@gmail.com
+useEffect(() => {
+  const fetchAdminProfile = async () => {
+    try {
+      const adminQuery = query(
+        collection(db, "users"),
+        where("email", "==", "admin@gmail.com")
+      );
+      const adminSnap = await getDocs(adminQuery);
+      if (!adminSnap.empty) {
+        const adminData = adminSnap.docs[0].data();
+        setAdminPhoto(adminData.photoURL || "/default-profile.png");
+        setAdminDisplayName(adminData.displayName || "Admin");
+      }
+    } catch (err) {
+      console.error("Error fetching admin profile:", err);
+      setAdminPhoto("/default-profile.png");
+      setAdminDisplayName("Admin");
+    }
+  };
+
+  fetchAdminProfile();
+}, []);
 
 // Mark messages as read when conversation is opened
 useEffect(() => {
@@ -1249,7 +1267,7 @@ useEffect(() => {
       {showWithdrawals && (
         <div className="withdrawals-list">
           {withdrawals.length === 0 ? (
-            <p className="empty-message">📭 No withdrawal history yet.</p>
+            <p className="empty-message"> No withdrawal history yet.</p>
           ) : (
             <>
               {withdrawals
@@ -1429,9 +1447,9 @@ useEffect(() => {
           />
         </div>
         
-        {/* Regular Conversations */}
+        {/* Conversations List */}
         {conversationUsers.length === 0 ? (
-          <p className="no-messages-text">No renter messages yet.</p>
+          <p className="no-messages-text">No messages yet.</p>
         ) : (
           conversationUsers
             .filter(user => user !== "renthub-support")
@@ -1524,31 +1542,48 @@ useEffect(() => {
                     (m.sender === ownerEmail && m.receiver === selectedChat) ||
                     (m.sender === selectedChat && m.receiver === ownerEmail)
                 )
-                .filter(m => !m.isAdminReply)
+                .filter(m => !m.isAdminReply && !m.isAutoReply)
                 .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
-                .map(m => (
+                .map(m => {
+                  console.log(" Rendering message from:", m.sender, "| userPhotos:", userPhotos, "| selectedChat:", selectedChat);
+                  return (
                   <div
                     key={m.id}
-                    className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"} ${m.isAutoReply || m.isAdminReply ? "auto-reply-message" : ""}`}
+                    className={`chat-bubble-container ${m.sender === ownerEmail ? "sent" : "received"}`}
                   >
-                    {m.isAutoReply && (
-                      <div className="auto-reply-label">
-                        <span>🤖</span> AI Assistant
-                      </div>
+                    {/* Profile Photo for received messages */}
+                    {m.sender !== ownerEmail && (
+                      <img 
+                        src={userPhotos[m.sender] || "/default-profile.png"} 
+                        alt={m.sender}
+                        className="chat-bubble-avatar"
+                        onError={(e) => {
+                          console.log("❌ Image load failed for:", m.sender, "| URL:", userPhotos[m.sender]);
+                          e.target.src = "/default-profile.png";
+                        }}
+                      />
                     )}
-                    {m.isAdminReply && (
-                      <div className="admin-reply-label">
-                        <span>👤</span> Support Team
-                      </div>
+                    
+                    <div className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"}`}>
+                      <p className="chat-message-text">{m.text}</p>
+                      <small className="chat-message-time">
+                        {m.createdAt?.toDate
+                          ? m.createdAt.toDate().toLocaleTimeString()
+                          : new Date().toLocaleTimeString()}
+                      </small>
+                    </div>
+                    
+                    {/* Owner Photo for sent messages */}
+                    {m.sender === ownerEmail && (
+                      <img 
+                        src={photoPreview || "/default-profile.png"} 
+                        alt="You"
+                        className="chat-bubble-avatar"
+                      />
                     )}
-                    <p className="chat-message-text">{m.text}</p>
-                    <small className="chat-message-time">
-                      {m.createdAt?.toDate
-                        ? m.createdAt.toDate().toLocaleTimeString()
-                        : new Date().toLocaleTimeString()}
-                    </small>
                   </div>
-                ))}
+                )})
+              }
             </div>
 
             {/* Message Input */}

@@ -898,6 +898,11 @@ const [replyText, setReplyText] = useState({});
 const [showCommentInput, setShowCommentInput] = useState({});
 const [showCommentsSection, setShowCommentsSection] = useState({});
 const [showProof, setShowProof] = useState({});
+const [showReturnProofModal, setShowReturnProofModal] = useState(false);
+const [returnProofRental, setReturnProofRental] = useState(null);
+const [returnProofImage, setReturnProofImage] = useState(null);
+const [returnProofPreview, setReturnProofPreview] = useState("");
+const [returnDescription, setReturnDescription] = useState("");
 const handleAddComment = async (postId) => {
   const text = newComments[postId]?.trim();
   if (!text && !commentImages[postId]) return;
@@ -942,6 +947,67 @@ const handleEditComment = async (postId, commentId, newText) => {
 const handleUpdateStatus = (id, newStatus) => {
   const updated = myRentals.map(r => (r.id === id ? { ...r, status: newStatus } : r));
   setMyRentals(updated);
+};
+
+const handleReturnProofChange = (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    setReturnProofImage(file);
+    setReturnProofPreview(URL.createObjectURL(file));
+  }
+};
+
+const handleSubmitReturnProof = async () => {
+  if (!returnProofImage) {
+    setToastMessage("⚠️ Please upload proof of return");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
+  if (!returnDescription.trim()) {
+    setToastMessage("⚠️ Please provide a reason for return");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    // Upload proof to Cloudinary
+    const proofUrl = await uploadToCloudinary(returnProofImage, "renthub/return-proofs");
+    
+    // Update rental status in Firestore
+    await updateDoc(doc(db, "rentals", returnProofRental.id), {
+      status: "Returned",
+      returnProofImage: proofUrl,
+      returnDescription: returnDescription.trim(),
+      returnedAt: serverTimestamp(),
+    });
+
+    setToastMessage("✅ Item marked as Returned");
+    setTimeout(() => setToastMessage(""), 2000);
+    
+    // Close modal and reset
+    setShowReturnProofModal(false);
+    setReturnProofRental(null);
+    setReturnProofImage(null);
+    setReturnProofPreview("");
+    setReturnDescription("");
+  } catch (err) {
+    console.error(err);
+    setToastMessage("❌ Failed to submit return proof");
+    setTimeout(() => setToastMessage(""), 3500);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleCancelReturnProof = () => {
+  setShowReturnProofModal(false);
+  setReturnProofRental(null);
+  setReturnProofImage(null);
+  setReturnProofPreview("");
+  setReturnDescription("");
 };
 
 // Add a new comment
@@ -1025,14 +1091,21 @@ useEffect(() => {
       mine.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setMessages(mine);
 
-      // Fetch user profiles for all participants
-      const participants = Array.from(new Set(mine.map(m => m.sender === renterEmail ? m.receiver : m.sender)));
+      // Fetch user profiles for all participants INCLUDING the renter themselves
+      const participants = Array.from(new Set(mine.flatMap(m => [m.sender, m.receiver])));
+      console.log("🔍 [Renter] Fetching profiles for:", participants);
+      
       participants.forEach(email => {
+        if (!email) return;
         const userQuery = query(collection(db, "users"), where("email", "==", email));
         const unsub = onSnapshot(userQuery, (snapshot) => {
           if (!snapshot.empty) {
             const userData = snapshot.docs[0].data();
+            console.log("✅ [Renter] Profile loaded for:", email, "| Photo:", userData.photoURL);
             setUserProfiles(prev => ({ ...prev, [email]: userData }));
+          } else {
+            console.log("⚠️ [Renter] No profile found for:", email);
+            setUserProfiles(prev => ({ ...prev, [email]: { displayName: email, photoURL: null } }));
           }
         });
         unsubscribers.push(unsub);
@@ -2044,7 +2117,10 @@ useEffect(() => {
                 {rental.status === "Completed" && (
                   <button
                     className="rental-card-btn returned-rental-btn"
-                    onClick={() => handleUpdateStatus(rental.id, "Returned")}
+                    onClick={() => {
+                      setReturnProofRental(rental);
+                      setShowReturnProofModal(true);
+                    }}
                   >
                     Returned
                   </button>
@@ -2106,6 +2182,66 @@ useEffect(() => {
         })}
       </div>
     </div>
+
+    {/* RETURN PROOF MODAL */}
+    {showReturnProofModal && returnProofRental && (
+      <div className="rental-modal-overlay">
+        <div className="rental-modal">
+          <button className="close-btn" onClick={handleCancelReturnProof}>✖</button>
+          
+          <h2>Return Proof Required</h2>
+          <p>Please upload proof that you have returned: <strong>{returnProofRental.propertyName}</strong></p>
+          
+          <div className="return-proof-form">
+            <label>Reason for Return / Issue Description *</label>
+            <textarea
+              className="return-description-textarea"
+              placeholder="Describe why you are returning this item (e.g., defect, damage, issue with product, etc.)..."
+              value={returnDescription}
+              onChange={(e) => setReturnDescription(e.target.value)}
+              rows={4}
+            />
+
+            <label>Upload Return Proof (Image) *</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleReturnProofChange}
+            />
+            
+            {returnProofPreview && (
+              <div className="return-proof-preview">
+                <p>Preview:</p>
+                <img
+                  src={returnProofPreview}
+                  alt="Return Proof Preview"
+                  className="proof-preview-image"
+                />
+              </div>
+            )}
+            
+            <div className="form-buttons">
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={handleCancelReturnProof}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="submit-btn"
+                onClick={handleSubmitReturnProof}
+                disabled={loading || !returnProofImage}
+              >
+                {loading ? "Submitting..." : "Submit Return Proof"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 )}
 
@@ -2197,12 +2333,43 @@ useEffect(() => {
               .filter(m => m.sender === renterEmail || m.receiver === renterEmail)
               .filter(m => m.sender === selectedChat || m.receiver === selectedChat)
               .sort((a,b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
-              .map(m => (
-                <div key={m.id} className={`chat-bubble ${m.sender === renterEmail ? "sent" : "received"}`}>
-                  <p>{m.text}</p>
-                  <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
-                </div>
-              ))}
+              .map(m => {
+                console.log("💬 [Renter] Rendering message from:", m.sender, "| userProfiles:", userProfiles);
+                return (
+                  <div key={m.id} className={`chat-bubble-container ${m.sender === renterEmail ? "sent" : "received"}`}>
+                    {/* Profile Photo for received messages (admin/owner) */}
+                    {m.sender !== renterEmail && (
+                      <img 
+                        src={userProfiles[m.sender]?.photoURL || "/default-profile.png"} 
+                        alt={m.sender}
+                        className="chat-bubble-avatar"
+                        onError={(e) => {
+                          console.log("❌ [Renter] Image load failed for:", m.sender, "| URL:", userProfiles[m.sender]?.photoURL);
+                          e.target.src = "/default-profile.png";
+                        }}
+                      />
+                    )}
+                    
+                    <div className={`chat-bubble ${m.sender === renterEmail ? "sent" : "received"}`}>
+                      <p>{m.text}</p>
+                      <small>{m.createdAt?.toDate?.().toLocaleTimeString()}</small>
+                    </div>
+                    
+                    {/* Renter Photo for sent messages */}
+                    {m.sender === renterEmail && (
+                      <img 
+                        src={userProfiles[renterEmail]?.photoURL || photoPreview || "/default-profile.png"} 
+                        alt="You"
+                        className="chat-bubble-avatar"
+                        onError={(e) => {
+                          console.log("❌ [Renter] Image load failed for renter:", renterEmail);
+                          e.target.src = "/default-profile.png";
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
           </div>
 
           <div className="chat-input">

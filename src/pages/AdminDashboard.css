@@ -990,6 +990,37 @@ body {
   font-size: 14px;
 }
 
+/* Return Reason Styling */
+.rental-modal-item.return-reason {
+  background-color: #fff3cd;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #ffc107;
+  margin: 10px 0;
+}
+
+.return-description-text {
+  margin-top: 8px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.rental-modal-proof-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 .rental-modal-select {
   width: 100%;
   padding: 10px;
@@ -1757,6 +1788,87 @@ body {
   margin-top: 4px;
 }
 
+/* ===============================
+   CHAT BUBBLE WITH PROFILE PHOTOS
+================================ */
+.chat-bubble-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 70%;
+  margin-bottom: 4px;
+}
+
+.chat-bubble-container.sent {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.chat-bubble-container.received {
+  align-self: flex-start;
+  flex-direction: row;
+}
+
+.chat-bubble-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chat-bubble-with-delete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.chat-bubble {
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.4;
+  position: relative;
+}
+
+.chat-bubble.sent {
+  background: #0084ff;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.received {
+  background: #e4e6eb;
+  color: #050505;
+  border-bottom-left-radius: 4px;
+}
+
+.chat-message-text {
+  margin: 0 0 4px 0;
+  word-break: break-word;
+}
+
+.message-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.message-delete-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
 .chat-input-section {
   padding: 16px;
   border-top: 1px solid #e5e5e5;
@@ -2055,6 +2167,20 @@ body {
   .messages-search-box { padding: 6px 10px; gap: 6px; }
   .messages-search-input { font-size: 13px; }
   .conversation-list { width: 260px; }
+  
+  /* Adjust chat bubbles for split screen */
+  .chat-bubble-container {
+    max-width: 80%;
+  }
+
+  .chat-bubble {
+    font-size: 13px;
+  }
+
+  .chat-bubble-avatar {
+    width: 30px;
+    height: 30px;
+  }
 }
 
 /* Mobile messenger-like layout */
@@ -2094,6 +2220,26 @@ body {
 
   .messages-search-box {
     padding: 6px 10px;
+  }
+
+  /* Chat bubble responsive styles */
+  .chat-bubble-container {
+    max-width: 85%;
+  }
+
+  .chat-bubble-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .chat-bubble {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .message-delete-btn {
+    font-size: 14px;
+    padding: 3px 6px;
   }
 
   /* Stack blocklist items vertically on mobile */
