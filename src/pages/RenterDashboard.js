@@ -485,8 +485,15 @@ const handleRentNow = (post) => {
 
   const dailyRate = Number(post.price) || 0;
   const rentalDays = 1;
-  const serviceFee = dailyRate * rentalDays * 0.1; // 10% service fee
-  const deliveryFee = 20; // default delivery fee
+  
+  // Service Fee: ₱15 for first ₱100, then +₱10 for every additional ₱100
+  // Fixed per rental (does not multiply by days)
+  const serviceFee = 15 + (Math.floor(dailyRate / 100) - 1) * 10;
+  
+  // Delivery Fee: ₱30-₱100 based on location/distance (from map)
+  // Fixed per rental (does not multiply by days)
+  const deliveryFee = 30; // Default, will be calculated from map
+  
   const totalAmount = dailyRate * rentalDays + serviceFee + deliveryFee;
 
   setRentalForm({
@@ -503,6 +510,7 @@ const handleRentNow = (post) => {
     serviceFee,
     deliveryFee,
     totalAmount,
+    discount: 0,
   });
 };
 
@@ -546,15 +554,13 @@ const handleFormChange = (e) => {
     if (name === "rentalDays") {
       const days = Number(value) || 1;
 
-      // Randomize service fee 10% - 12%
-      const serviceFeePercentage = 9 + Math.random() * 1; // 10% - 12%
-      const serviceFee = prev.dailyRate * days * (serviceFeePercentage / 100);
+      // Keep existing service fee (fixed, not multiplied by days)
+      const serviceFee = prev.serviceFee;
+      
+      // Keep existing delivery fee (fixed, not multiplied by days)
+      const deliveryFee = prev.deliveryFee;
 
-      // Randomize delivery fee 5% - 7%
-      const deliveryFeePercentage = 5 + Math.random() * 1; // 5% - 7%
-      const deliveryFee = prev.dailyRate * days * (deliveryFeePercentage / 100);
-
-      // Base total
+      // Base total: Only daily rate is multiplied by days, fees stay the same
       let totalAmount = prev.dailyRate * days + serviceFee + deliveryFee;
 
       // Apply 1% discount if 7 or more days
