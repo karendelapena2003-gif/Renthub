@@ -394,6 +394,21 @@ const initMap = useCallback(() => {
       const data = await res.json();
       const displayName = data.name || data.display_name || "Unknown Place";
       const province = (data.address?.state || data.address?.province || "").toLowerCase();
+      const municipality = (data.address?.municipality || data.address?.city || data.address?.town || "").toLowerCase();
+      const village = (data.address?.village || data.address?.suburb || data.address?.hamlet || "").toLowerCase();
+      const road = (data.address?.road || "").toLowerCase();
+      const fullDisplayName = (data.display_name || "").toLowerCase();
+
+      // Debug: log ALL location details
+      console.log("📍 FULL Location Details:", {
+        displayName: displayName,
+        province: province,
+        municipality: municipality,
+        village: village,
+        road: road,
+        fullDisplayName: fullDisplayName,
+        completeAddress: data.address
+      });
 
       // Province restriction: only Isabela or Negros Occidental
       const allowedProvinces = ["isabela", "negros occidental"];
@@ -402,14 +417,110 @@ const initMap = useCallback(() => {
         return;
       }
 
-      setRentalForm((prev) => ({
-        ...prev,
-        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-        placeName: displayName,
-        province,
-      }));
+      // Delivery Fee Calculation based on specific locations
+      // ₱30 - Town Proper (Poblacion/Main Town)
+      const location30 = [
+        "barangay 5", "bgry 5", "barangay5", "bgry5",
+        "barangay 3", "bgry 3", "barangay3", "bgry3",
+        "barangay 4", "bgry 4", "barangay4", "bgry4",
+        "barangay 6", "bgry 6", "barangay6", "bgry6",
+        "barangay 9", "bgry 9", "barangay9", "bgry9",
+        "barangay 2", "bgry 2", "barangay2", "bgry2",
+        "barangay 1", "bgry 1", "barangay1", "bgry1",
+        "barangay 8", "bgry 8", "barangay8", "bgry8",
+        "renaldo street", "renaldo",
+        "rizal extension", "rizal ext",
+        "panganiban street", "panganiban",
+        "bagonawa", "la castellana",
+        "isabela-libas", "libas road", "boundary road", "libas"
+      ];
+
+      // ₱50 - Near barangays
+      const location50 = [
+        "maytubig",
+        "san agustin",
+        "mansablay",
+        "camangcamang", "camang",
+        "cansalongon"
+      ];
+
+      // ₱70 - Medium distance
+      const location70 = [
+        "payao"
+      ];
+
+      // ₱80 - Far areas
+      const location80 = [
+        "cabcab",
+        "amin",
+        "camp clark",
+        "libas national high school", "libas nhs",
+        "sacop"
+      ];
+
+      // ₱90 - Very far areas
+      const location90 = [
+        "sebucauan elementary school", "sebucauan",
+        "sikatuna elementary school", "sikatuna"
+      ];
+
+      // ₱100 - Farthest areas
+      const location100 = [
+        "banogbanog",
+        "limalima",
+        "makilignit"
+      ];
+
+      // Function to check if location matches any keyword in the list
+      const matchesLocation = (keywords) => {
+        return keywords.some(keyword => 
+          fullDisplayName.includes(keyword) || 
+          village.includes(keyword) || 
+          road.includes(keyword) ||
+          displayName.toLowerCase().includes(keyword)
+        );
+      };
+
+      // Calculate delivery fee based on location priority (check from highest to lowest)
+      let newDeliveryFee = 50; // Default fallback
+      
+      if (matchesLocation(location100)) {
+        newDeliveryFee = 100;
+      } else if (matchesLocation(location90)) {
+        newDeliveryFee = 90;
+      } else if (matchesLocation(location80)) {
+        newDeliveryFee = 80;
+      } else if (matchesLocation(location70)) {
+        newDeliveryFee = 70;
+      } else if (matchesLocation(location50)) {
+        newDeliveryFee = 50;
+      } else if (matchesLocation(location30)) {
+        newDeliveryFee = 30;
+      }
+      
+      console.log(`💰 DELIVERY FEE CALCULATION:
+        - Municipality: "${municipality}"
+        - Village/Barangay: "${village}"
+        - Road: "${road}"
+        - Display Name: "${displayName}"
+        - Full Display: "${fullDisplayName}"
+        - Delivery Fee: ₱${newDeliveryFee}`);
+
+      setRentalForm((prev) => {
+        // Recalculate total with new delivery fee
+        const newTotal = prev.dailyRate * prev.rentalDays + prev.serviceFee + newDeliveryFee - (prev.discount || 0);
+        console.log(`🔄 Updating form - Old Fee: ₱${prev.deliveryFee}, New Fee: ₱${newDeliveryFee}, New Total: ₱${newTotal}`);
+        return {
+          ...prev,
+          address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          placeName: displayName,
+          province,
+          deliveryFee: newDeliveryFee,
+          totalAmount: newTotal,
+        };
+      });
     } catch (err) {
-      console.error("Reverse geocode failed:", err);
+      console.error("❌ Reverse geocode failed:", err);
       setRentalForm((prev) => ({ ...prev, placeName: "Unknown Place" }));
     }
   };
@@ -487,12 +598,13 @@ const handleRentNow = (post) => {
   const rentalDays = 1;
   
   // Service Fee: ₱15 for first ₱100, then +₱10 for every additional ₱100
-  // Fixed per rental (does not multiply by days)
-  const serviceFee = 15 + (Math.floor(dailyRate / 100) - 1) * 10;
+  // Formula: ₱5 + (₱10 × number of ₱100 increments)
+  // Examples: ₱100→₱15, ₱200→₱25, ₱500→₱55, ₱600→₱65
+  const serviceFee = Math.max(5, 5 + Math.floor(dailyRate / 100) * 10);
   
-  // Delivery Fee: ₱30-₱100 based on location/distance (from map)
-  // Fixed per rental (does not multiply by days)
-  const deliveryFee = 30; // Default, will be calculated from map
+  // Delivery Fee: ₱30 for Municipality of Isabela, ₱50 for other areas
+  // Default to ₱30, will be updated based on selected location
+  const deliveryFee = 30;
   
   const totalAmount = dailyRate * rentalDays + serviceFee + deliveryFee;
 
