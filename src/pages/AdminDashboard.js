@@ -18,7 +18,7 @@ import {
   deleteDoc,
   where,
 } from "firebase/firestore";
-import { updateProfile, sendPasswordResetEmail } from "firebase/auth";
+import { updateProfile } from "firebase/auth";
 import { uploadToCloudinary } from "../cloudinary";
 import { increment } from "firebase/firestore";
 
@@ -1042,30 +1042,6 @@ const [showRentersList, setShowRentersList] = useState(false);
     }
   };
 
-  // 🔑 SEND PASSWORD RESET EMAIL
-  const handleSendPasswordReset = async (user) => {
-    if (!user?.email) return;
-    
-    if (!window.confirm(`Send password reset email to ${user.email}?`)) return;
-    
-    try {
-      await sendPasswordResetEmail(auth, user.email, {
-        url: window.location.origin + "/login",
-      });
-      
-      setToastMessage(`✅ Password reset email sent to ${user.email}`);
-      setTimeout(() => setToastMessage(""), 3000);
-    } catch (err) {
-      console.error("Failed to send password reset", err);
-      if (err.code === "auth/user-not-found") {
-        setToastMessage("❌ User not found in authentication system");
-      } else {
-        setToastMessage("❌ Failed to send password reset email");
-      }
-      setTimeout(() => setToastMessage(""), 3000);
-    }
-  };
-
   /* ---------------- render ---------------- */
   const displayedOwners = owners.filter((u) => !u.blocked && !u.deleted);
   const displayedRenters = renters.filter((u) => !u.blocked && !u.deleted);
@@ -1388,9 +1364,6 @@ const [showRentersList, setShowRentersList] = useState(false);
         <div className="user-details-panel">
           <div className="panel-header">
             <h3>{selectedUser.email}</h3>
-            <button onClick={() => handleSendPasswordReset(selectedUser)} style={{ backgroundColor: "#4CAF50" }}>
-              🔑 Reset Password
-            </button>
             <button onClick={() => handleBlockUser(selectedUser)}>
               {blockedUsers.includes(selectedUser.uid) ? "Unblock" : "Block"}
             </button>

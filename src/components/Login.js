@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -11,9 +11,12 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showForgot, setShowForgot] = useState(false); // toggle forgot password
+  
+  // Role selection modal
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [pendingUser, setPendingUser] = useState(null);
+  const [selectedRole, setSelectedRole] = useState("");
 
   // 🔐 LOGIN
   const handleLogin = async (e) => {
@@ -58,31 +61,36 @@ const Login = () => {
     }
   };
 
-  // 📧 FORGOT PASSWORD (Owner & Renter Only)
-  const handleForgotPassword = async () => {
-    setError("");
-    setSuccess("");
-
-    if (!email) {
-      setError("Please enter your email");
+  // 🎭 HANDLE ROLE SELECTION
+  const handleRoleSelection = async () => {
+    if (!selectedRole) {
+      setError("Please select a role");
       return;
     }
 
     try {
-      // Send reset email
-      await sendPasswordResetEmail(auth, email, {
-        url: window.location.origin + "/login",
+      const docRef = doc(db, "users", pendingUser.uid);
+      await setDoc(docRef, { 
+        email: pendingUser.email, 
+        role: selectedRole, 
+        createdAt: new Date(),
+        displayName: pendingUser.displayName || "",
+        photoURL: pendingUser.photoURL || ""
       });
-      setSuccess("Reset link sent to your email.");
 
-      // Auto-close forgot password after 3 seconds
-      setTimeout(() => {
-        setShowForgot(false);
-        setSuccess("");
-      }, 3000);
+      // Redirect based on selected role
+      if (selectedRole === "owner") {
+        navigate("/owner-dashboard");
+      } else {
+        navigate("/renter-dashboard");
+      }
 
+      // Reset modal
+      setShowRoleModal(false);
+      setPendingUser(null);
+      setSelectedRole("");
     } catch (err) {
-      setError(err.message);
+      setError("Error saving profile: " + err.message);
     }
   };
 
@@ -94,23 +102,31 @@ const Login = () => {
       const docRef = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
 
-      if (!docSnap.exists()) {
-        await setDoc(docRef, { email: user.email, role: "renter", createdAt: new Date() });
-      }
+      // If user already exists, check role and navigate
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.blocked || data.deleted) {
+          await signOut(auth);
+          setError("This account is blocked or deleted.");
+          return;
+        }
 
-      const data = docSnap.exists() ? docSnap.data() : { role: "renter" };
-      if (data.blocked || data.deleted) {
-        await signOut(auth);
-        setError("This account is blocked or deleted.");
+        const role = data.role;
+        if (role === "owner") navigate("/owner-dashboard");
+        else if (role === "renter") navigate("/renter-dashboard");
+        else navigate("/unauthorized");
         return;
       }
 
-      const role = data.role;
-      if (role === "owner") navigate("/owner-dashboard");
-      else navigate("/renter-dashboard");
+      // New user - show role selection modal
+      setPendingUser(user);
+      setShowRoleModal(true);
+      setError("");
 
     } catch (err) {
-      setError(err.message);
+      if (err.code !== "auth/popup-closed-by-user") {
+        setError("Google login error: " + err.message);
+      }
     }
   };
 
@@ -122,23 +138,31 @@ const Login = () => {
       const docRef = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
 
-      if (!docSnap.exists()) {
-        await setDoc(docRef, { email: user.email, role: "renter", createdAt: new Date() });
-      }
+      // If user already exists, check role and navigate
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.blocked || data.deleted) {
+          await signOut(auth);
+          setError("This account is blocked or deleted.");
+          return;
+        }
 
-      const data = docSnap.exists() ? docSnap.data() : { role: "renter" };
-      if (data.blocked || data.deleted) {
-        await signOut(auth);
-        setError("This account is blocked or deleted.");
+        const role = data.role;
+        if (role === "owner") navigate("/owner-dashboard");
+        else if (role === "renter") navigate("/renter-dashboard");
+        else navigate("/unauthorized");
         return;
       }
 
-      const role = data.role;
-      if (role === "owner") navigate("/owner-dashboard");
-      else navigate("/renter-dashboard");
+      // New user - show role selection modal
+      setPendingUser(user);
+      setShowRoleModal(true);
+      setError("");
 
     } catch (err) {
-      setError(err.message);
+      if (err.code !== "auth/popup-closed-by-user") {
+        setError("Facebook login error: " + err.message);
+      }
     }
   };
 
@@ -147,89 +171,99 @@ const Login = () => {
       <div className="login-box">
         <h2 className="login-title">RentHub Login</h2>
 
-        {!showForgot && (
-          <form onSubmit={handleLogin} className="login-form">
-            <input
-              type="email"
-              placeholder="Email"
-              className="login-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              className="login-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-
-            {error && <p className="error-message">{error}</p>}
-
-            <button type="submit" className="login-btn" disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
-            </button>
-
-            <p
-              className="forgot-password"
-              onClick={() => {
-                setError("");
-                setSuccess("");
-                setShowForgot(true);
-              }}
-            >
-              Forgot password?
-            </p>
-
-            <div className="social-login">
-              <p>Or sign in with</p>
-              <div className="social-buttons">
-                <button type="button" onClick={handleGoogleLogin} className="google-btn">
-                  Google
-                </button>
-                <button type="button" onClick={handleFacebookLogin} className="facebook-btn">
-                  Facebook
-                </button>
-              </div>
-            </div>
-
-            <p className="login-switch">
-              Don’t have an account?{" "}
-              <span onClick={() => navigate("/register")} className="login-link">
-                Register here
-              </span>
-            </p>
-          </form>
-        )}
-
-        {/* 🔑 FORGOT PASSWORD FORM */}
-        {showForgot && (
+        {!showRoleModal ? (
           <>
-            <div className="forgot-header">
-              <h2>Forgot Password</h2>
-              <span className="close-btn" onClick={() => setShowForgot(false)}>
-                ✕
-              </span>
+            <form onSubmit={handleLogin} className="login-form">
+              <input
+                type="email"
+                placeholder="Email"
+                className="login-input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                className="login-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+
+              {error && <p className="error-message">{error}</p>}
+
+              <button type="submit" className="login-btn" disabled={loading}>
+                {loading ? "Logging in..." : "Login"}
+              </button>
+
+              <div className="social-login">
+                <p>Or sign in with</p>
+                <div className="social-buttons">
+                  <button type="button" onClick={handleGoogleLogin} className="google-btn">
+                    Google
+                  </button>
+                  <button type="button" onClick={handleFacebookLogin} className="facebook-btn">
+                    Facebook
+                  </button>
+                </div>
+              </div>
+
+              <p className="login-switch">
+                Don't have an account?{" "}
+                <span onClick={() => navigate("/register")} className="login-link">
+                  Register here
+                </span>
+              </p>
+            </form>
+          </>
+        ) : (
+          // 🎭 ROLE SELECTION MODAL
+          <div className="role-selection-modal">
+            <h2>Select Your Role</h2>
+            <p>Welcome, {pendingUser?.displayName || pendingUser?.email}!</p>
+
+            <div className="role-options">
+              <button
+                className={`role-btn ${selectedRole === "owner" ? "active" : ""}`}
+                onClick={() => setSelectedRole("owner")}
+              >
+                <strong>👤 Property Owner</strong>
+                <p>List and manage your properties</p>
+              </button>
+
+              <button
+                className={`role-btn ${selectedRole === "renter" ? "active" : ""}`}
+                onClick={() => setSelectedRole("renter")}
+              >
+                <strong>🏠 Renter</strong>
+                <p>Browse and rent properties</p>
+              </button>
             </div>
 
-            <input
-              type="email"
-              placeholder="Enter your email"
-              className="login-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-
             {error && <p className="error-message">{error}</p>}
-            {success && <p className="success-message">{success}</p>}
 
-            <button className="login-btn" onClick={handleForgotPassword}>
-              Send Reset Email
-            </button>
-          </>
+            <div className="role-buttons">
+              <button 
+                className="role-confirm-btn" 
+                onClick={handleRoleSelection}
+                disabled={!selectedRole}
+              >
+                Continue
+              </button>
+              <button 
+                className="role-cancel-btn" 
+                onClick={() => {
+                  setShowRoleModal(false);
+                  setPendingUser(null);
+                  setSelectedRole("");
+                  setError("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

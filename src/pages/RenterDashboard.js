@@ -29,6 +29,8 @@ import {
   reauthenticateWithCredential,
   signOut,
   updatePassword,
+  reauthenticateWithPopup,
+  GoogleAuthProvider,
 } from "firebase/auth";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -1545,7 +1547,26 @@ useEffect(() => {
 const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleChangePassword = async () => {
-  if (!currentPassword || !newPassword || !confirmPassword) {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  // Check if user has password provider (email/password login)
+  const hasPasswordProvider = user.providerData.some(
+    provider => provider.providerId === "password"
+  );
+
+  const hasGoogleProvider = user.providerData.some(
+    provider => provider.providerId === "google.com"
+  );
+
+  // For users with existing password, require current password
+  if (hasPasswordProvider && !currentPassword) {
+    setToastMessage("⚠️ Please enter your current password");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
+  if (!newPassword || !confirmPassword) {
     setToastMessage("⚠️ Please fill in all fields");
     setTimeout(() => setToastMessage(""), 2500);
     return;
@@ -1557,31 +1578,54 @@ const [confirmPassword, setConfirmPassword] = useState("");
     return;
   }
 
+  if (newPassword.length < 6) {
+    setToastMessage("⚠️ Password must be at least 6 characters");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
   try {
     setPasswordLoading(true);
-    const auth = getAuth();
-    const user = auth.currentUser;
 
-    const credential = EmailAuthProvider.credential(
-      user.email,
-      currentPassword
-    );
+    // If user has password provider, re-authenticate with password
+    if (hasPasswordProvider && currentPassword) {
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
+      );
+      await reauthenticateWithCredential(user, credential);
+    } 
+    // If Google user wants to set password, re-authenticate with Google popup
+    else if (hasGoogleProvider && !hasPasswordProvider) {
+      const provider = new GoogleAuthProvider();
+      await reauthenticateWithPopup(user, provider);
+    }
 
-    // Re-authenticate
-    await reauthenticateWithCredential(user, credential);
-
-    // Update password
+    // Update/Set password
     await updatePassword(user, newPassword);
 
-    setToastMessage("✅ Password updated successfully");
-    setTimeout(() => setToastMessage(""), 2000);
+    setToastMessage(hasPasswordProvider 
+      ? "✅ Password updated successfully!" 
+      : "✅ Password set successfully! You can now login with email/password");
+    setTimeout(() => setToastMessage(""), 3000);
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setShowSettings(false);
   } catch (error) {
-    setToastMessage("❌ " + error.message);
-    setTimeout(() => setToastMessage(""), 3500);
+    console.error("Password change error:", error);
+    if (error.code === "auth/wrong-password") {
+      setToastMessage("❌ Current password is incorrect");
+    } else if (error.code === "auth/weak-password") {
+      setToastMessage("❌ Password is too weak");
+    } else if (error.code === "auth/popup-closed-by-user") {
+      setToastMessage("⚠️ Authentication cancelled. Please try again.");
+    } else if (error.code === "auth/requires-recent-login") {
+      setToastMessage("❌ Session expired. Please logout and login again, then retry.");
+    } else {
+      setToastMessage("❌ " + error.message);
+    }
+    setTimeout(() => setToastMessage(""), 4000);
   } finally {
     setPasswordLoading(false);
   }
@@ -1659,7 +1703,7 @@ useEffect(() => {
 
         <div className="profile-info">
           <p>Name: {user.displayName || "No Name"}</p>
-          <p>Email: {user.email || "No Email"}</p>
+          <p>Email: {user.email || auth.currentUser?.email || "No Email"}</p>
           <p>
             Joined:{" "}
             {user.createdAt?.toDate
@@ -1715,20 +1759,30 @@ useEffect(() => {
 
         {showSettings && (
   <div className="settings-form">
-    <h3>Change Password</h3>
+    <h3>
+      {user?.providerData?.some(p => p.providerId === "password") 
+        ? "Change Password" 
+        : "Set Password"}
+    </h3>
 
-    <label>Current Password</label>
-    <input
-      type="password"
-      value={currentPassword}
-      onChange={(e) => setCurrentPassword(e.target.value)}
-    />
+    {user?.providerData?.some(p => p.providerId === "password") && (
+      <>
+        <label>Current Password</label>
+        <input
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Enter current password"
+        />
+      </>
+    )}
 
     <label>New Password</label>
     <input
       type="password"
       value={newPassword}
       onChange={(e) => setNewPassword(e.target.value)}
+      placeholder="At least 6 characters"
     />
 
     <label>Confirm New Password</label>
@@ -1736,6 +1790,7 @@ useEffect(() => {
       type="password"
       value={confirmPassword}
       onChange={(e) => setConfirmPassword(e.target.value)}
+      placeholder="Re-enter new password"
     />
 
     <div className="profile-form-buttons">
@@ -1743,7 +1798,11 @@ useEffect(() => {
         onClick={handleChangePassword}
         disabled={passwordLoading}
       >
-        {passwordLoading ? "Updating..." : "Update Password"}
+        {passwordLoading ? "Updating..." : (
+          user?.providerData?.some(p => p.providerId === "password") 
+            ? "Update Password" 
+            : "Set Password"
+        )}
       </button>
       <button onClick={() => setShowSettings(false)}>Cancel</button>
     </div>
