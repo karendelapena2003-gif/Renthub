@@ -2307,3 +2307,140 @@ body {
 .toast-notification.warning {
   background-color: #ff9800;
 }
+/* ===============================
+   OVERDUE RENTALS STYLING
+================================ */
+
+/* Overdue alert card in dashboard */
+.stat-card.overdue-alert {
+  border: 3px solid #ff5252;
+  background: linear-gradient(135deg, #ffebee 0%, #fff 100%);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: #ff5252;
+  }
+  50% {
+    border-color: #ff8a80;
+  }
+}
+
+.stat-card.overdue-alert h3 {
+  color: #d32f2f;
+}
+
+.stat-card.overdue-alert p {
+  color: #c62828;
+  font-weight: 700;
+  font-size: 28px;
+}
+
+.stat-card.overdue-alert small {
+  color: #e53935;
+  font-weight: 600;
+}
+
+/* Overdue warning in rental modal */
+.overdue-warning-admin {
+  background: #ffebee;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #d32f2f;
+  margin: 10px 0;
+}
+
+.overdue-badge-admin {
+  background: #ff5252;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: 10px;
+  animation: shake-admin 0.5s;
+  animation-iteration-count: 1;
+}
+
+@keyframes shake-admin {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+.send-notification-btn,
+.view-return-proof-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.send-notification-btn:hover,
+.view-return-proof-btn:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+}
+
+.send-notification-btn {
+  background: #ff9800;
+}
+
+.send-notification-btn:hover {
+  background: #f57c00;
+  box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* ===============================
+   ADMIN RENTAL CARD DUE DATE
+================================ */
+
+.admin-rental-duedate {
+  font-size: 14px;
+  padding: 8px;
+  margin: 8px 0;
+  border-radius: 6px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 600;
+  border-left: 4px solid #4caf50;
+}
+
+.admin-rental-duedate.overdue {
+  background: #ffebee;
+  color: #c62828;
+  border-left-color: #d32f2f;
+}
+
+.overdue-tag {
+  background: #ff5252;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 8px;
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}

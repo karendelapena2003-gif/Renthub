@@ -42,6 +42,7 @@ const AdminDashboard = ({ onLogout }) => {
 
   const [rentals, setRentals] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [overdueRentals, setOverdueRentals] = useState([]);
 
   /* ---------------- messages ---------------- */
   const [messages, setMessages] = useState([]);
@@ -135,7 +136,28 @@ const AdminDashboard = ({ onLogout }) => {
     });
 
     const rentalsQ = query(collection(db, "rentals"), orderBy("createdAt", "desc"));
-    const unsubRentals = onSnapshot(rentalsQ, (snap) => setRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    const unsubRentals = onSnapshot(rentalsQ, (snap) => {
+      const allRentals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setRentals(allRentals);
+      
+      // Check for overdue rentals
+      const now = new Date();
+      const overdue = allRentals.filter((rental) => {
+        if (rental.status !== "Completed") return false;
+        
+        const dateRented = rental.dateRented || rental.createdAt;
+        if (!dateRented) return false;
+        
+        const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+        const rentalDays = rental.rentalDays || 1;
+        const dueDate = new Date(rentedDate);
+        dueDate.setDate(dueDate.getDate() + rentalDays);
+        
+        return now > dueDate;
+      });
+      
+      setOverdueRentals(overdue);
+    });
 
     const unsubWithdrawals = onSnapshot(collection(db, "withdrawals"), (snap) => setWithdrawals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
 
@@ -163,6 +185,54 @@ const AdminDashboard = ({ onLogout }) => {
       return new Date(val).toLocaleString();
     } catch {
       return "N/A";
+    }
+  };
+
+  // Calculate days overdue for a rental
+  const getDaysOverdue = (rental) => {
+    const now = new Date();
+    const dateRented = rental.dateRented || rental.createdAt;
+    if (!dateRented) return 0;
+    
+    const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+    const rentalDays = rental.rentalDays || 1;
+    const dueDate = new Date(rentedDate);
+    dueDate.setDate(dueDate.getDate() + rentalDays);
+    
+    const diffTime = now - dueDate;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  // Get due date for rental
+  const getDueDate = (rental) => {
+    const dateRented = rental.dateRented || rental.createdAt;
+    if (!dateRented) return null;
+    
+    const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+    const rentalDays = rental.rentalDays || 1;
+    const dueDate = new Date(rentedDate);
+    dueDate.setDate(dueDate.getDate() + rentalDays);
+    return dueDate;
+  };
+
+  // Send overdue notification to renter
+  const sendOverdueNotification = async (rental) => {
+    try {
+      await addDoc(collection(db, "messages"), {
+        sender: adminEmail || "admin@renthub.com",
+        receiver: rental.renterEmail,
+        text: `⚠️ OVERDUE NOTICE: Your rental "${rental.propertyName}" is ${getDaysOverdue(rental)} day(s) overdue. Please return the item immediately with proof of return to avoid penalties.`,
+        createdAt: serverTimestamp(),
+        isSystemMessage: true,
+      });
+      
+      setToastMessage("✅ Overdue notification sent");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error("Failed to send notification:", err);
+      setToastMessage("❌ Failed to send notification");
+      setTimeout(() => setToastMessage(""), 2500);
     }
   };
 
@@ -731,20 +801,45 @@ const approveWithdrawal = async (withdrawal) => {
 };
 
 const rejectWithdrawal = async (withdrawal) => {
-  const { id } = withdrawal;
-  if (!window.confirm("Are you sure you want to reject this withdrawal?")) return;
+  const { id, ownerEmail, amount } = withdrawal;
+  if (!window.confirm("Are you sure you want to reject this withdrawal? The balance will be refunded.")) return;
 
   try {
+    // Update withdrawal status
     await updateDoc(doc(db, "withdrawals", id), {
       status: "rejected",
       rejectedAt: serverTimestamp(),
       rejectedBy: adminEmail,
     });
 
-    alert("Withdrawal rejected successfully");
+    // Refund balance back to owner's earnings
+    const ownerRef = doc(db, "owners", withdrawal.ownerUid || "");
+    if (withdrawal.ownerUid) {
+      await updateDoc(ownerRef, {
+        earnings: increment(amount || 0),
+        totalEarnings: increment(amount || 0)
+      }).catch(() => {
+        // If owner doc doesn't exist, just log it
+        console.warn("Could not update owner earnings for refund");
+      });
+    }
+
+    // Send notification to owner
+    await addDoc(collection(db, "messages"), {
+      sender: adminEmail,
+      receiver: ownerEmail,
+      senderRole: "admin",
+      receiverRole: "owner",
+      text: `Your withdrawal request of ₱${amount} has been rejected. The balance has been refunded to your account.`,
+      createdAt: serverTimestamp(),
+    });
+
+    setToastMessage("✅ Withdrawal rejected and balance refunded");
+    setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error(err);
-    alert("Failed to reject withdrawal");
+    setToastMessage("❌ Failed to reject withdrawal");
+    setTimeout(() => setToastMessage(""), 2500);
   }
 };
 
@@ -992,6 +1087,15 @@ const [showRentersList, setShowRentersList] = useState(false);
                 <h3>Rent List</h3>
                 <p>{rentals.length}</p>
               </div>
+              <div className={`stat-card ${overdueRentals.length > 0 ? "overdue-alert" : ""}`} onClick={() => setActivePage("rentlist")}>
+                <h3>⚠️ Overdue Returns</h3>
+                <p>{overdueRentals.length}</p>
+                <small>
+                  {overdueRentals.length > 0 
+                    ? `${overdueRentals.length} rental(s) need attention!` 
+                    : "No overdue rentals"}
+                </small>
+              </div>
               <div className="stat-card" onClick={() => setActivePage("transactions")}>
                 <h3>Transactions</h3>
                 <p>{withdrawals.length}</p>
@@ -1053,21 +1157,17 @@ const [showRentersList, setShowRentersList] = useState(false);
                                 className="remove-btn"
                                 onClick={async () => {
                                   try {
-                                    // If property is approved, just mark as removed instead of deleting
-                                    // so renters can still see it in their browse
-                                    if (p.status === "approved") {
-                                      await updateDoc(doc(db, "properties", p.id), {
-                                        removedByAdmin: true,
-                                        removedAt: serverTimestamp()
-                                      });
-                                    } else {
-                                      // If not approved, completely delete it
-                                      await deleteDoc(doc(db, "properties", p.id));
-                                    }
+                                    // Mark property as removed by admin instead of deleting
+                                    // This way only admin won't see it, but property record stays intact
+                                    await updateDoc(doc(db, "properties", p.id), {
+                                      removedByAdmin: true,
+                                      removedAt: serverTimestamp(),
+                                      removedByAdminId: adminUser?.uid
+                                    });
                                   
                                     setProperties((prev) => prev.filter((prop) => prop.id !== p.id));
                                     setFilteredProperties((prev) => prev.filter((prop) => prop.id !== p.id));
-                                    setToastMessage("✅ Property removed successfully");
+                                    setToastMessage("✅ Property removed from your view");
                                     setTimeout(() => setToastMessage(""), 2500);
                                   } catch (err) {
                                     console.error(err);
@@ -1337,6 +1437,12 @@ const [showRentersList, setShowRentersList] = useState(false);
                           <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
                           <div className="admin-rental-price">Price: ₱{it.dailyRate || it.price || 0}</div>
                           <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
+                          {it.status === "Completed" && getDueDate(it) && (
+                            <div className={`admin-rental-duedate ${getDaysOverdue(it) > 0 ? "overdue" : ""}`}>
+                              Due: {getDueDate(it).toLocaleDateString()}
+                              {getDaysOverdue(it) > 0 && <span className="overdue-tag"> ⚠️ {getDaysOverdue(it)}d OVERDUE</span>}
+                            </div>
+                          )}
                           <div className="admin-rental-status">
                             Status:
                             <button onClick={() => openRentalModal(it, group)} className="admin-rental-status-btn">{it.status || "N/A"}</button>
@@ -1396,6 +1502,40 @@ const [showRentersList, setShowRentersList] = useState(false);
         <div className="rental-modal-item"><strong>Service Fee:</strong> ₱{rentalModal?.serviceFee || 0}</div>
         <div className="rental-modal-item"><strong>Delivery Fee:</strong> ₱{rentalModal?.deliveryFee || 0}</div>
         <div className="rental-modal-item"><strong>Total Amount:</strong> ₱{rentalModal?.totalAmount || rentalModal?.totalPrice || 0}</div>
+        
+        {/* Overdue Warning */}
+        {rentalModal?.status === "Completed" && getDueDate(rentalModal) && (
+          <div className={`rental-modal-item ${getDaysOverdue(rentalModal) > 0 ? "overdue-warning-admin" : ""}`}>
+            <strong>Due Date:</strong> {getDueDate(rentalModal).toLocaleDateString()}
+            {getDaysOverdue(rentalModal) > 0 && (
+              <>
+                <span className="overdue-badge-admin"> ⚠️ {getDaysOverdue(rentalModal)} days overdue!</span>
+                <button 
+                  onClick={() => sendOverdueNotification(rentalModal)}
+                  className="send-notification-btn"
+                  style={{ marginLeft: "10px", padding: "5px 10px", fontSize: "12px" }}
+                >
+                  📧 Send Reminder
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        
+        {/* Return Proof Display */}
+        {rentalModal?.status === "Returned" && rentalModal?.returnProofImage && (
+          <div className="rental-modal-item">
+            <strong>Return Description:</strong> {rentalModal?.returnDescription || "N/A"}
+            <br />
+            <button
+              onClick={() => window.open(rentalModal?.returnProofImage, "_blank")}
+              className="view-return-proof-btn"
+              style={{ marginTop: "8px" }}
+            >
+              📷 View Return Proof
+            </button>
+          </div>
+        )}
       </div>
 
       <label className="rental-modal-label">Update Status:</label>

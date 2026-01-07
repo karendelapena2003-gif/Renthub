@@ -96,8 +96,11 @@ const [selectedTab, setSelectedTab] = useState("Processing");
   const [messageSearch, setMessageSearch] = useState("");
   const [lastReadByChat, setLastReadByChat] = useState({});
 
-// Filter rentals by selected status
-const filteredRentals = myRentals.filter((r) => r.status === selectedTab);
+// Filter rentals by selected status (handle "Return" tab mapping to "Returned" status)
+const filteredRentals = myRentals.filter((r) => {
+  const tabStatus = selectedTab === "Return" ? "Returned" : selectedTab;
+  return r.status === tabStatus;
+});
 
   const renterEmail = user?.email || "";
 
@@ -1021,6 +1024,9 @@ const [returnProofRental, setReturnProofRental] = useState(null);
 const [returnProofImage, setReturnProofImage] = useState(null);
 const [returnProofPreview, setReturnProofPreview] = useState("");
 const [returnDescription, setReturnDescription] = useState("");
+const [overdueRentals, setOverdueRentals] = useState([]);
+const [showOverdueModal, setShowOverdueModal] = useState(false);
+
 const handleAddComment = async (postId) => {
   const text = newComments[postId]?.trim();
   if (!text && !commentImages[postId]) return;
@@ -1083,7 +1089,7 @@ const handleSubmitReturnProof = async () => {
   }
 
   if (!returnDescription.trim()) {
-    setToastMessage("⚠️ Please provide a reason for return");
+    setToastMessage("⚠️ Please provide feedback for return");
     setTimeout(() => setToastMessage(""), 2500);
     return;
   }
@@ -1126,6 +1132,75 @@ const handleCancelReturnProof = () => {
   setReturnProofImage(null);
   setReturnProofPreview("");
   setReturnDescription("");
+};
+
+// Check for overdue rentals
+const checkOverdueRentals = useCallback(() => {
+  const now = new Date();
+  const overdueList = myRentals.filter((rental) => {
+    // Only check Completed rentals (items that should be returned)
+    if (rental.status !== "Completed") return false;
+    
+    const dateRented = rental.dateRented || rental.createdAt;
+    if (!dateRented) return false;
+    
+    const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+    const rentalDays = rental.rentalDays || 1;
+    const dueDate = new Date(rentedDate);
+    dueDate.setDate(dueDate.getDate() + rentalDays);
+    
+    // Check if rental is overdue (due date has passed)
+    return now > dueDate;
+  });
+  
+  setOverdueRentals(overdueList);
+  return overdueList;
+}, [myRentals]);
+
+// Auto-check overdue rentals
+useEffect(() => {
+  if (myRentals.length > 0) {
+    const overdueList = checkOverdueRentals();
+    
+    // Show modal if there are overdue rentals
+    if (overdueList.length > 0 && activePage === "myRentals") {
+      // Only show once per session or every hour
+      const lastShown = localStorage.getItem("lastOverdueShown");
+      const now = Date.now();
+      if (!lastShown || now - parseInt(lastShown) > 3600000) { // 1 hour
+        setShowOverdueModal(true);
+        localStorage.setItem("lastOverdueShown", now.toString());
+      }
+    }
+  }
+}, [myRentals, checkOverdueRentals, activePage]);
+
+// Calculate days overdue
+const getDaysOverdue = (rental) => {
+  const now = new Date();
+  const dateRented = rental.dateRented || rental.createdAt;
+  if (!dateRented) return 0;
+  
+  const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+  const rentalDays = rental.rentalDays || 1;
+  const dueDate = new Date(rentedDate);
+  dueDate.setDate(dueDate.getDate() + rentalDays);
+  
+  const diffTime = now - dueDate;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays > 0 ? diffDays : 0;
+};
+
+// Get due date for rental
+const getDueDate = (rental) => {
+  const dateRented = rental.dateRented || rental.createdAt;
+  if (!dateRented) return null;
+  
+  const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+  const rentalDays = rental.rentalDays || 1;
+  const dueDate = new Date(rentedDate);
+  dueDate.setDate(dueDate.getDate() + rentalDays);
+  return dueDate;
 };
 
 // Add a new comment
@@ -2176,7 +2251,7 @@ useEffect(() => {
 
       {/* Tabs */}
       <div className="rentals-tabs">
-        {["Processing", "To Receive", "To deliver", "Completed", "Returned", "Cancelled"].map(
+        {["Processing", "To Receive", "To deliver", "Completed", "Return", "Cancelled"].map(
           (tab, index) => (
             <button
               key={tab}
@@ -2240,7 +2315,7 @@ useEffect(() => {
                       setShowReturnProofModal(true);
                     }}
                   >
-                    Returned
+                    {getDaysOverdue(rental) > 0 ? `⚠️ Return Now (${getDaysOverdue(rental)}d Overdue)` : "Return"}
                   </button>
                 )}
 
@@ -2264,7 +2339,8 @@ useEffect(() => {
                 <p><strong>Phone Number:</strong> {rental.renterPhone || "N/A"}</p>
                 <p><strong>Address:</strong> {rental.address || "N/A"}</p>
                 <p><strong>Place Name:</strong> {rental.placeName || "N/A"}</p>
-                <p><strong>Postal Code:</strong> {rental.postalCode || "N/A"}</p>
+                <p><strong>Postal Code:</strong> {rental.postalCode || rental.zipCode || rental.postCode || "N/A"}</p>
+                <p><strong>Province:</strong> {rental.province || rental.state || "N/A"}</p>
                 <p><strong>Payment Method:</strong> {rental.paymentMethod || "N/A"}</p>
                 {rental.paymentMethod === "GCash" && (
                   <div>
@@ -2294,6 +2370,24 @@ useEffect(() => {
                 <p><strong>Delivery Fee:</strong> ₱{rental.deliveryFee?.toLocaleString() || "0"}</p>
                 <p><strong>Total Amount:</strong> ₱{rental.totalAmount?.toLocaleString() || "0"}</p>
                 <p><strong>Date Rented:</strong> {formatDate(rentalDate)}</p>
+                {rental.status === "Completed" && getDueDate(rental) && (
+                  <p className={getDaysOverdue(rental) > 0 ? "overdue-warning" : ""}>
+                    <strong>Due Date:</strong> {getDueDate(rental).toLocaleDateString()}
+                    {getDaysOverdue(rental) > 0 && <span className="overdue-badge"> ⚠️ {getDaysOverdue(rental)} days overdue!</span>}
+                  </p>
+                )}
+                {rental.returnProofImage && rental.status === "Returned" && (
+                  <div className="return-proof-info">
+                    <p><strong>Return Description:</strong> {rental.returnDescription || "N/A"}</p>
+                    <button
+                      type="button"
+                      onClick={() => window.open(rental.returnProofImage, "_blank")}
+                      className="view-proof-btn"
+                    >
+                      View Return Proof
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -2310,11 +2404,17 @@ useEffect(() => {
           <h2>Return Proof Required</h2>
           <p>Please upload proof that you have returned: <strong>{returnProofRental.propertyName}</strong></p>
           
+          <div className="return-proof-details">
+            <p><strong>Address:</strong> {returnProofRental.address || "N/A"}</p>
+            <p><strong>Postal Code:</strong> {returnProofRental.postalCode || returnProofRental.zipCode || returnProofRental.postCode || "N/A"}</p>
+            <p><strong>Owner Email:</strong> {returnProofRental.ownerEmail || "N/A"}</p>
+          </div>
+          
           <div className="return-proof-form">
-            <label>Reason for Return / Issue Description *</label>
+            <label>Return Feedback *</label>
             <textarea
               className="return-description-textarea"
-              placeholder="Describe why you are returning this item (e.g., defect, damage, issue with product, etc.)..."
+              placeholder="Share your feedback about the rental experience (e.g., condition of item, satisfaction, any comments)..."
               value={returnDescription}
               onChange={(e) => setReturnDescription(e.target.value)}
               rows={4}
@@ -2507,6 +2607,58 @@ useEffect(() => {
 
         )}
       </div>
+
+      {/* OVERDUE RENTALS MODAL */}
+      {showOverdueModal && overdueRentals.length > 0 && (
+        <div className="rental-modal-overlay">
+          <div className="rental-modal overdue-modal">
+            <button className="close-btn" onClick={() => setShowOverdueModal(false)}>✖</button>
+            
+            <h2 className="overdue-modal-title">⚠️ Overdue Rentals Detected!</h2>
+            <p className="overdue-modal-subtitle">
+              You have {overdueRentals.length} rental(s) that are past their due date.
+              Please return the items as soon as possible to avoid penalties.
+            </p>
+            
+            <div className="overdue-rental-list">
+              {overdueRentals.map((rental) => (
+                <div key={rental.id} className="overdue-rental-item">
+                  <img 
+                    src={rental.propertyImage || "/no-image.png"} 
+                    alt={rental.propertyName} 
+                    className="overdue-rental-image"
+                  />
+                  <div className="overdue-rental-details">
+                    <h4>{rental.propertyName}</h4>
+                    <p><strong>Owner:</strong> {rental.ownerEmail}</p>
+                    <p><strong>Due Date:</strong> {getDueDate(rental)?.toLocaleDateString()}</p>
+                    <p className="overdue-days"><strong>Overdue:</strong> {getDaysOverdue(rental)} day(s)</p>
+                  </div>
+                  <button
+                    className="overdue-return-btn"
+                    onClick={() => {
+                      setReturnProofRental(rental);
+                      setShowReturnProofModal(true);
+                      setShowOverdueModal(false);
+                    }}
+                  >
+                    Return Now
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            <div className="overdue-modal-footer">
+              <button 
+                className="overdue-modal-close-btn" 
+                onClick={() => setShowOverdueModal(false)}
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (

@@ -55,6 +55,11 @@ const OwnerDashboard = ({ onLogout }) => {
   const [userPhotos, setUserPhotos] = useState({});
   const [adminPhoto, setAdminPhoto] = useState("");
   const [adminDisplayName, setAdminDisplayName] = useState("");
+  const [myRentalsView, setMyRentalsView] = useState([]);
+  const [showRentersFor, setShowRentersFor] = useState(null); // property ID to show renters
+  const [selectedRenterForMessage, setSelectedRenterForMessage] = useState(null);
+  const [renterMessage, setRenterMessage] = useState("");
+  const [viewingPropertyRenters, setViewingPropertyRenters] = useState(null); // For separate page view
 
   // Comments states
   const [comments, setComments] = useState({});
@@ -101,6 +106,18 @@ useEffect(() => {
   return () => unsub();
 }, [ownerEmail]);
 
+// Fetch all rentals for owner's properties
+useEffect(() => {
+  if (!ownerEmail) return;
+  const q = query(collection(db, "rentals"), where("ownerEmail", "==", ownerEmail));
+  const unsub = onSnapshot(q, (snapshot) => {
+    const rentalData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    setMyRentalsView(rentalData);
+    console.log("Owner's rentals loaded:", rentalData.length);
+  });
+  return () => unsub();
+}, [ownerEmail]);
+
 // Fetch comments for owner's posts
 useEffect(() => {
   if (!ownerEmail || posts.length === 0) return;
@@ -138,11 +155,61 @@ useEffect(() => {
   return () => unsubscribers.forEach(u => u());
 }, [ownerEmail, posts]);
 
+  // ---------- Helper Functions ----------
+  
+  // Calculate due date for rental
+  const getDueDate = (rental) => {
+    const dateRented = rental.dateRented || rental.createdAt;
+    if (!dateRented) return null;
+    
+    const rentedDate = dateRented.toDate ? dateRented.toDate() : new Date(dateRented);
+    const rentalDays = rental.rentalDays || 1;
+    const dueDate = new Date(rentedDate);
+    dueDate.setDate(dueDate.getDate() + rentalDays);
+    return dueDate;
+  };
 
-
-
+  // Calculate days overdue
+  const getDaysOverdue = (rental) => {
+    const now = new Date();
+    const dueDate = getDueDate(rental);
+    if (!dueDate) return 0;
+    
+    const diffTime = now - dueDate;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
 
   // ---------- Profile handlers ----------
+
+  // Send message to renter
+  const handleSendMessageToRenter = async (renterEmail) => {
+    if (!renterMessage.trim()) {
+      setToastMessage("⚠️ Please enter a message");
+      setTimeout(() => setToastMessage(""), 2500);
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        sender: ownerEmail,
+        receiver: renterEmail,
+        senderRole: "owner",
+        receiverRole: "renter",
+        text: renterMessage,
+        createdAt: serverTimestamp(),
+      });
+
+      setToastMessage("✅ Message sent to renter");
+      setTimeout(() => setToastMessage(""), 2500);
+      setRenterMessage("");
+      setSelectedRenterForMessage(null);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to send message");
+      setTimeout(() => setToastMessage(""), 2500);
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!auth.currentUser) {
@@ -337,6 +404,22 @@ useEffect(() => {
     } catch (err) {
       console.error(err);
       setToastMessage("❌ Failed to delete post");
+      setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
+
+  const handleDeleteRental = async (rentalId) => {
+    if (!window.confirm("Are you sure you want to delete this rental record?")) {
+      return;
+    }
+    
+    try {
+      await deleteDoc(doc(db, "rentals", rentalId));
+      setToastMessage("✅ Rental deleted successfully");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to delete rental");
       setTimeout(() => setToastMessage(""), 3500);
     }
   };
@@ -1029,7 +1112,7 @@ useEffect(() => {
               onClick={() => setShowSettings(!showSettings)}
               className="settings-btn"
             >
-              Settings
+              Change Password
             </button>
           </div>
         )}
@@ -1702,12 +1785,28 @@ useEffect(() => {
             <h2>Rental Item</h2>
             {posts.length===0 ? <p>No rental items yet.</p> : (
               <div className="properties-list">
-                {posts.map(post=>(
+                {posts.map(post=>{
+                  const propertyRentals = myRentalsView.filter(r => r.propertyId === post.id);
+                  console.log(`Property ${post.name} (${post.id}):`, propertyRentals.length, "rentals");
+                  
+                  return (
               <div key={post.id} className="property-card">
                 {post.imageUrl && <img src={post.imageUrl} alt={post.name} className="property-image"/>}
                 <h3>{post.name}</h3>
                 <p><strong>Price:</strong> ₱{post.price}</p>
                 <p><strong>Status:</strong> {post.status}</p>
+                
+                {/* View Renters Button */}
+                {propertyRentals.length > 0 && (
+                  <button 
+                    className="view-renters-btn"
+                    onClick={() => setViewingPropertyRenters(post)}
+                  >
+                    ▶ View Renters ({propertyRentals.length})
+                  </button>
+                )}
+
+                
                 <div className="property-actions">
                   <button className="delete-btn" onClick={()=>handleDeletePost(post.id)}>🗑️ Delete</button>
                 </div>
@@ -1796,7 +1895,9 @@ useEffect(() => {
                   )}
                 </div>
               </div>
-            ))}
+            );
+          })}
+
             </div>
             )}
           </section>
@@ -1806,6 +1907,146 @@ useEffect(() => {
 
       
   </div>
+
+  {/* Separate Page View for Property Renters */}
+  {viewingPropertyRenters && (
+    <div className="property-renters-fullview">
+      <div className="renters-fullview-header">
+        <button 
+          className="back-to-rentlist-btn"
+          onClick={() => {
+            setViewingPropertyRenters(null);
+            setSelectedRenterForMessage(null);
+            setRenterMessage('');
+          }}
+        >
+          ← Back to Rent List
+        </button>
+        <h2>Renters for: {viewingPropertyRenters.name}</h2>
+      </div>
+
+      <div className="renters-fullview-container">
+        {myRentalsView
+          .filter(r => r.propertyId === viewingPropertyRenters.id)
+          .map(rental => {
+            const dueDate = getDueDate(rental);
+            const daysOverdue = getDaysOverdue(rental);
+            const isOverdue = rental.status === "Completed" && daysOverdue > 0;
+
+            return (
+              <div key={rental.id} className={`renter-detail-card ${isOverdue ? 'overdue-card' : ''}`}>
+                <div className="renter-detail-header">
+                  <h3>{rental.renterName || 'Renter'}</h3>
+                  <span className={`status-badge status-${rental.status?.toLowerCase().replace(/\s+/g, '-')}`}>
+                    {rental.status}
+                  </span>
+                </div>
+
+                <div className="renter-detail-body">
+                  <div className="detail-section">
+                    <h4>📇 Contact Information</h4>
+                    <p><strong>Renter Name:</strong> {rental.renterName || 'N/A'}</p>
+                    <p><strong>Renter Email:</strong> {rental.renterEmail}</p>
+                    <p><strong>Renter Phone:</strong> {rental.renterPhone || 'N/A'}</p>
+                  </div>
+
+                  <div className="detail-section">
+                    <h4>📍 Delivery Information</h4>
+                    <p><strong>Address:</strong> {rental.address || 'N/A'}</p>
+                    {rental.placeName && <p><strong>Place Name:</strong> {rental.placeName}</p>}
+                    <p><strong>Postal Code:</strong> {rental.postalCode || rental.zipCode || rental.postCode || 'N/A'}</p>
+                    {rental.province && <p><strong>Province:</strong> {rental.province}</p>}
+                  </div>
+
+                  <div className="detail-section">
+                    <h4>💰 Payment & Pricing</h4>
+                    <p><strong>Payment Method:</strong> {rental.paymentMethod || 'N/A'}</p>
+                    <p><strong>Daily Rate:</strong> ₱{rental.dailyRate?.toLocaleString() || 'N/A'}</p>
+                    <p><strong>Rental Days:</strong> {rental.rentalDays || 'N/A'} day(s)</p>
+                    {rental.totalAmount && <p><strong>Total Amount:</strong> ₱{rental.totalAmount?.toLocaleString()}</p>}
+                  </div>
+
+                  <div className="detail-section">
+                    <h4>📅 Rental Timeline</h4>
+                    <p><strong>Date Rented:</strong> {rental.dateRented ? new Date(rental.dateRented.toDate?.() || rental.dateRented).toLocaleDateString() : 'N/A'}</p>
+                    <p className={isOverdue ? 'due-date-overdue' : 'due-date-normal'}>
+                      <strong>Due Date:</strong> {dueDate ? dueDate.toLocaleDateString() : 'N/A'}
+                      {isOverdue && (
+                        <span className="overdue-warning">
+                          ⚠️ Overdue by {daysOverdue} day{daysOverdue > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  {rental.status === "Returned" && rental.returnProofImage && (
+                    <div className="detail-section">
+                      <h4>✅ Return Information</h4>
+                      <p><strong>Return Proof:</strong></p>
+                      <img 
+                        src={rental.returnProofImage} 
+                        alt="Return proof" 
+                        className="return-proof-image"
+                      />
+                      {rental.returnDescription && (
+                        <p><strong>Feedback:</strong> {rental.returnDescription}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="renter-actions">
+                    <div className="renter-action-buttons">
+                      {selectedRenterForMessage === rental.id ? (
+                        <div className="message-section-expanded">
+                          <textarea
+                            className="message-textarea"
+                            placeholder="Type your message to the renter..."
+                            value={renterMessage}
+                            onChange={(e) => setRenterMessage(e.target.value)}
+                            rows={4}
+                          />
+                          <div className="message-buttons">
+                            <button 
+                              className="send-msg-btn"
+                              onClick={() => handleSendMessageToRenter(rental.renterEmail)}
+                            >
+                              📤 Send Message
+                            </button>
+                            <button 
+                              className="cancel-msg-btn"
+                              onClick={() => {
+                                setSelectedRenterForMessage(null);
+                                setRenterMessage('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button 
+                          className="open-message-btn"
+                          onClick={() => setSelectedRenterForMessage(rental.id)}
+                        >
+                          💬 Message Renter
+                        </button>
+                      )}
+                      
+                      <button 
+                        className="delete-rental-btn"
+                        onClick={() => handleDeleteRental(rental.id)}
+                      >
+                        🗑️ Delete Rental
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  )}
 </div>
   );
 }
