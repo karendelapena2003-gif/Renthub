@@ -39,10 +39,10 @@
 
 /* ===== Title ===== */
 .register-title {
-  font-size: 26px;
+  font-size: 36px;
   font-weight: 700;
   margin-bottom: 14px;
-  color: #309fce;
+  color: #ffffff;
   text-shadow: 0 0 10px rgba(120, 240, 255, 0.35);
 }
 
@@ -124,7 +124,7 @@
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 10px;
-  color: #489dd1;
+  color: #0e0e0e;
   padding: 9px 13px;
   font-size: 14px;
   cursor: pointer;

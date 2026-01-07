@@ -127,7 +127,7 @@
   border-radius: 10px;
   color: #6fd0a3;
   padding: 9px 13px;
-  font-size: 14px;
+  font-size: 18px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -148,6 +148,53 @@
   height: 30px;
 }
 
+/* ===== Forgot Password Link ===== */
+.forgot-password {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #000000;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.forgot-password:hover {
+  color: #0c0b0b;
+  text-shadow: 0 0 8px rgba(160, 255, 230, 0.8);
+}
+
+/* ===== Forgot Password Form ===== */
+.forgot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.forgot-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #e7faff;
+}
+
+.close-btn {
+  font-size: 24px;
+  cursor: pointer;
+  color: #e7faff;
+  transition: all 0.3s ease;
+}
+
+.close-btn:hover {
+  color: #ffffff;
+  transform: scale(1.2);
+}
+
+.success-message {
+  color: #4caf50;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
 /* ===== Register Link ===== */
 .login-switch {
   margin-top: 10px;
@@ -156,10 +203,10 @@
 }
 
 .login-link {
-  color: #648fd8;
+  color: #000000;
   cursor: pointer;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 18px;
   transition: color 0.3s ease;
 }
 
