@@ -812,12 +812,30 @@ const rejectWithdrawal = async (withdrawal) => {
       rejectedBy: adminEmail,
     });
 
-    // Refund balance back to owner's earnings
-    const ownerRef = doc(db, "owners", withdrawal.ownerUid || "");
-    if (withdrawal.ownerUid) {
-      await updateDoc(ownerRef, {
-        earnings: increment(amount || 0),
-        totalEarnings: increment(amount || 0)
+    // Refund balance back to owner's earnings (resolve owner doc even if ownerUid missing)
+    const refundAmount = Number(amount || 0);
+    let targetOwnerUid = withdrawal.ownerUid || withdrawal.ownerId; // prefer explicit uid/id on record
+
+    // Try local owners list by email
+    if (!targetOwnerUid && withdrawal.ownerEmail && Array.isArray(owners)) {
+      const owner = owners.find(o => (o.email || "").toLowerCase() === (withdrawal.ownerEmail || "").toLowerCase());
+      targetOwnerUid = owner?.uid;
+    }
+
+    // Fallback: query Firestore owners by email
+    if (!targetOwnerUid && withdrawal.ownerEmail) {
+      try {
+        const snap = await getDocs(query(collection(db, "owners"), where("email", "==", withdrawal.ownerEmail)));
+        targetOwnerUid = snap.docs[0]?.id;
+      } catch (lookupErr) {
+        console.warn("Owner lookup by email failed", lookupErr);
+      }
+    }
+
+    if (targetOwnerUid && refundAmount > 0) {
+      await updateDoc(doc(db, "owners", targetOwnerUid), {
+        earnings: increment(refundAmount),
+        totalEarnings: increment(refundAmount)
       }).catch(() => {
         // If owner doc doesn't exist, just log it
         console.warn("Could not update owner earnings for refund");

@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+    function isEmail(email) { return isSignedIn() && request.auth.token.email == email; }
+
+    // Owners collection: owner can read/update own doc, but cannot change earnings fields; admin can update all
+    match /owners/{ownerUid} {
+      allow read: if isSelf(ownerUid) || isAdmin();
+      allow create: if isSelf(ownerUid);
+      allow update: if (
+        isSelf(ownerUid) &&
+        request.resource.data.earnings == resource.data.earnings &&
+        request.resource.data.totalEarnings == resource.data.totalEarnings
+      ) || isAdmin();
+    }
+
+    // Renters collection: renter or admin access
+    match /renters/{renterUid} {
+      allow read, create, update: if isSelf(renterUid) || isAdmin();
+    }
+
+    // Shared users collection used for roles and profiles
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid) || isAdmin();
+    }
+
+    // Properties: public reads only for approved, owner/admin full control
+    match /properties/{propertyId} {
+      allow read: if isAdmin() || resource.data.status == "approved" || isEmail(resource.data.ownerEmail);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isEmail(resource.data.ownerEmail);
+    }
+
+    // Rentals: owner, renter, or admin may read/update
+    match /rentals/{rentalId} {
+      allow read: if isAdmin() || isEmail(resource.data.ownerEmail) || isEmail(resource.data.renterEmail);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isEmail(resource.data.ownerEmail) || isEmail(resource.data.renterEmail);
+    }
+
+    // Rental comments and replies
+    match /rentals/{postId}/comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isEmail(resource.data.authorEmail);
+    }
+    match /rentals/{postId}/comments/{commentId}/replies/{replyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isEmail(resource.data.authorEmail);
+    }
+
+    // Messages: only participants or admin can read; sender/admin can modify/delete
+    match /messages/{messageId} {
+      allow read: if isAdmin() || isEmail(resource.data.sender) || isEmail(resource.data.receiver);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || isEmail(resource.data.sender);
+    }
+
+    // Withdrawals: owner can create/read own; admin can update/delete
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerId);
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

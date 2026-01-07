@@ -40,7 +40,7 @@ const RenterDashboard = () => {
   const markerRef = useRef(null);
 
   // --- State ---
-const [activePage, setActivePage] = useState("renterProfile");
+const [activePage, setActivePage] = useState("browseRentals");
 const [user, setUser] = useState(null);
 const [loading, setLoading] = useState(false);
 const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -95,6 +95,7 @@ const [passwordLoading, setPasswordLoading] = useState(false);
 const [selectedTab, setSelectedTab] = useState("Processing");
   const [messageSearch, setMessageSearch] = useState("");
   const [lastReadByChat, setLastReadByChat] = useState({});
+  const [userRole, setUserRole] = useState("");
 
 // Filter rentals by selected status (handle "Return" tab mapping to "Returned" status)
 const filteredRentals = myRentals.filter((r) => {
@@ -156,6 +157,8 @@ const filteredRentals = myRentals.filter((r) => {
       setUser(currentUser);
       setDisplayName(currentUser.displayName || "");
       setPhotoPreview(currentUser.photoURL || "/default-profile.png");
+      // Ensure renters land on Browse Rentals upon login
+      setActivePage("browseRentals");
     });
     return () => unsubscribe();
   }, [navigate]);
@@ -170,7 +173,12 @@ const filteredRentals = myRentals.filter((r) => {
     unsubscribers.push(
       onSnapshot(
         query(collection(db, "properties"), where("status", "==", "approved")),
-        (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+        (err) => {
+          console.error("Firestore: properties read denied", err);
+          setToastMessage("❌ Cannot load properties (permissions)");
+          setTimeout(() => setToastMessage(""), 2500);
+        }
       )
     );
 
@@ -180,20 +188,51 @@ const filteredRentals = myRentals.filter((r) => {
     unsubscribers.push(
       onSnapshot(
         query(collection(db, "rentals"), where("renterEmail", "==", renterEmail)),
-        (snap) => setMyRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        (snap) => setMyRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+        (err) => {
+          console.error("Firestore: rentals read denied", err);
+          setToastMessage("❌ Cannot load your rentals (permissions)");
+          setTimeout(() => setToastMessage(""), 2500);
+        }
       )
     );
 
 
 
-    // Messages
+    // Messages: subscribe only to threads involving this renter
+    const msgsMap = new Map();
+    const applyMsgs = () => {
+      const list = Array.from(msgsMap.values());
+      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setMessages(list);
+    };
+
+    const qSender = query(collection(db, "messages"), where("sender", "==", renterEmail));
+    const qReceiver = query(collection(db, "messages"), where("receiver", "==", renterEmail));
+
     unsubscribers.push(
-      onSnapshot(collection(db, "messages"), (snap) => {
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const mine = all.filter((m) => m.sender === renterEmail || m.receiver === renterEmail);
-        mine.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        setMessages(mine);
-      })
+      onSnapshot(
+        qSender,
+        (snap) => {
+          snap.docs.forEach((d) => msgsMap.set(d.id, { id: d.id, ...d.data() }));
+          applyMsgs();
+        },
+        (err) => {
+          console.error("Firestore: messages (sender) read denied", err);
+        }
+      )
+    );
+    unsubscribers.push(
+      onSnapshot(
+        qReceiver,
+        (snap) => {
+          snap.docs.forEach((d) => msgsMap.set(d.id, { id: d.id, ...d.data() }));
+          applyMsgs();
+        },
+        (err) => {
+          console.error("Firestore: messages (receiver) read denied", err);
+        }
+      )
     );
 
     return () => unsubscribers.forEach((u) => u());
@@ -300,9 +339,17 @@ const openOwnerProfile = useCallback((email) => {
 
   // Subscribe to the selected owner's properties
   const q = query(collection(db, "properties"), where("ownerEmail", "==", email));
-  const unsub = onSnapshot(q, (snap) => {
-    setOwnerPostsList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  const unsub = onSnapshot(
+    q,
+    (snap) => {
+      setOwnerPostsList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    (err) => {
+      console.error("Firestore: owner properties read denied", err);
+      setToastMessage("❌ Cannot load owner posts (permissions)");
+      setTimeout(() => setToastMessage(""), 2500);
+    }
+  );
   ownerUnsubRef.current = unsub;
 }, []);
 
@@ -332,14 +379,21 @@ const closeOwnerProfile = () => {
 
     emails.forEach((email) => {
       const q = query(collection(db, "users"), where("email", "==", email));
-      const unsub = onSnapshot(q, (snap) => {
-        if (!snap.empty) {
-          const d = snap.docs[0].data();
-          setOwnerNames((prev) => ({ ...prev, [email]: d.displayName || d.name || email }));
-        } else {
+      const unsub = onSnapshot(
+        q,
+        (snap) => {
+          if (!snap.empty) {
+            const d = snap.docs[0].data();
+            setOwnerNames((prev) => ({ ...prev, [email]: d.displayName || d.name || email }));
+          } else {
+            setOwnerNames((prev) => ({ ...prev, [email]: email }));
+          }
+        },
+        (err) => {
+          console.error("Firestore: owner names read denied", err);
           setOwnerNames((prev) => ({ ...prev, [email]: email }));
         }
-      });
+      );
       unsubscribers.push(unsub);
     });
 
@@ -356,9 +410,15 @@ const closeOwnerProfile = () => {
     if (!posts || posts.length === 0) return;
     const unsubArr = posts.map((post) => {
       const q = collection(db, `properties/${post.id}/comments`);
-      return onSnapshot(q, (snap) => {
-        setComments((prev) => ({ ...prev, [post.id]: snap.docs.map((d) => d.data()) }));
-      });
+      return onSnapshot(
+        q,
+        (snap) => {
+          setComments((prev) => ({ ...prev, [post.id]: snap.docs.map((d) => d.data()) }));
+        },
+        (err) => {
+          console.error("Firestore: comments read denied", err);
+        }
+      );
     });
     return () => unsubArr.forEach((u) => u());
   }, [posts]);
@@ -948,15 +1008,22 @@ const [adminSearchTerm, setAdminSearchTerm] = useState(""); // optional, for sea
 
   // Fetch all rentals for admin view
 useEffect(() => {
+  if (userRole !== "admin") return;
   const q = query(collection(db, "rentals"));
-  adminUnsubRef.current = onSnapshot(q, (snap) => {
-    setAdminRentalList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  adminUnsubRef.current = onSnapshot(
+    q,
+    (snap) => {
+      setAdminRentalList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    (err) => {
+      console.error("Firestore: admin rentals read denied", err);
+    }
+  );
 
   return () => {
     if (adminUnsubRef.current) adminUnsubRef.current();
   };
-}, []);
+}, [userRole]);
 
 
   // Filtered owner posts
@@ -1001,10 +1068,16 @@ useEffect(() => {
       collection(db, "rentals", post.id, "comments"),
       orderBy("createdAt")
     );
-    return onSnapshot(q, snapshot => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setComments(prev => ({ ...prev, [post.id]: data }));
-    });
+    return onSnapshot(
+      q,
+      snapshot => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setComments(prev => ({ ...prev, [post.id]: data }));
+      },
+      err => {
+        console.error("Firestore: rental comments read denied", err);
+      }
+    );
   });
 
   return () => unsubscribes.forEach(u => u());
@@ -1267,47 +1340,35 @@ const handleDeleteComment = (postId, commentId) => {
   }));
 };
 
+// Subscribe to user profiles for participants in current messages
 useEffect(() => {
-  if (!renterEmail) return;
   const unsubscribers = [];
+  const participants = Array.from(new Set(messages.flatMap(m => [m.sender, m.receiver])));
+  if (participants.length === 0) return;
 
-  unsubscribers.push(
-    onSnapshot(collection(db, "messages"), (snap) => {
-      const allMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      // Only messages involving this renter
-      const mine = allMessages.filter(
-        m => m.sender === renterEmail || m.receiver === renterEmail
-      );
-
-      // Sort newest first
-      mine.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setMessages(mine);
-
-      // Fetch user profiles for all participants INCLUDING the renter themselves
-      const participants = Array.from(new Set(mine.flatMap(m => [m.sender, m.receiver])));
-      console.log("🔍 [Renter] Fetching profiles for:", participants);
-      
-      participants.forEach(email => {
-        if (!email) return;
-        const userQuery = query(collection(db, "users"), where("email", "==", email));
-        const unsub = onSnapshot(userQuery, (snapshot) => {
-          if (!snapshot.empty) {
-            const userData = snapshot.docs[0].data();
-            console.log("✅ [Renter] Profile loaded for:", email, "| Photo:", userData.photoURL);
-            setUserProfiles(prev => ({ ...prev, [email]: userData }));
-          } else {
-            console.log("⚠️ [Renter] No profile found for:", email);
-            setUserProfiles(prev => ({ ...prev, [email]: { displayName: email, photoURL: null } }));
-          }
-        });
-        unsubscribers.push(unsub);
-      });
-    })
-  );
+  participants.forEach(email => {
+    if (!email) return;
+    const userQuery = query(collection(db, "users"), where("email", "==", email));
+    const unsub = onSnapshot(
+      userQuery,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const userData = snapshot.docs[0].data();
+          setUserProfiles(prev => ({ ...prev, [email]: userData }));
+        } else {
+          setUserProfiles(prev => ({ ...prev, [email]: { displayName: email, photoURL: null } }));
+        }
+      },
+      (err) => {
+        console.error("Firestore: user profile read denied", err);
+        setUserProfiles(prev => ({ ...prev, [email]: { displayName: email, photoURL: null } }));
+      }
+    );
+    unsubscribers.push(unsub);
+  });
 
   return () => unsubscribers.forEach(u => u());
-}, [renterEmail]);
+}, [messages]);
 
 // Mark chat as read when messages update for the open chat
 useEffect(() => {
@@ -1493,7 +1554,7 @@ const [confirmPassword, setConfirmPassword] = useState("");
   }
 };
 
-const [userRole, setUserRole] = useState(""); // <-- define userRole state
+// moved userRole state above to avoid TDZ errors
 
 useEffect(() => {
   const auth = getAuth();
