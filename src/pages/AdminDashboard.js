@@ -111,18 +111,34 @@ const AdminDashboard = ({ onLogout }) => {
 
   /* ---------------- realtime listeners ---------------- */
   useEffect(() => {
+    // Only allow admin email to access these listeners
+    const currentEmail = auth.currentUser?.email;
+    if (currentEmail !== "admin@gmail.com") {
+      console.warn("Non-admin trying to access admin dashboard");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
-    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-      setUsersList(list);
-      setOwners(list.filter((u) => u.role === "owner"));
-      setRenters(list.filter((u) => u.role === "renter"));
-      setBlockedUsers(list.filter((u) => u.blocked || u.deleted).map((u) => u.uid));
+    const unsubUsers = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        setUsersList(list);
+        setOwners(list.filter((u) => u.role === "owner"));
+        setRenters(list.filter((u) => u.role === "renter"));
+        setBlockedUsers(list.filter((u) => u.blocked || u.deleted).map((u) => u.uid));
 
-      // Auto-fix missing name/photo using owner/renter docs so admin sees latest profile
-      backfillUsersProfileData(list);
-    });
+        // Auto-fix missing name/photo using owner/renter docs so admin sees latest profile
+        backfillUsersProfileData(list);
+      },
+      (err) => {
+        console.error("Firestore: users read denied", err);
+        setToastMessage("❌ Cannot load users (check admin permissions)");
+        setTimeout(() => setToastMessage(""), 3000);
+      }
+    );
 
     const unsubProps = onSnapshot(collection(db, "properties"), (snap) => {
       const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -159,13 +175,29 @@ const AdminDashboard = ({ onLogout }) => {
       setOverdueRentals(overdue);
     });
 
-    const unsubWithdrawals = onSnapshot(collection(db, "withdrawals"), (snap) => setWithdrawals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    const unsubWithdrawals = onSnapshot(
+      collection(db, "withdrawals"),
+      (snap) => setWithdrawals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => {
+        console.error("Firestore: withdrawals read denied", err);
+        setToastMessage("❌ Cannot load withdrawals (check admin permissions)");
+        setTimeout(() => setToastMessage(""), 3000);
+      }
+    );
 
     // Messages listener
-    const unsubMessages = onSnapshot(collection(db, "messages"), (snap) => {
-      const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setMessages(msgs);
-    });
+    const unsubMessages = onSnapshot(
+      collection(db, "messages"),
+      (snap) => {
+        const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setMessages(msgs);
+      },
+      (err) => {
+        console.error("Firestore: messages read denied", err);
+        setToastMessage("❌ Cannot load messages (check admin permissions)");
+        setTimeout(() => setToastMessage(""), 3000);
+      }
+    );
 
     setLoading(false);
     return () => {
@@ -222,6 +254,7 @@ const AdminDashboard = ({ onLogout }) => {
       await addDoc(collection(db, "messages"), {
         sender: adminEmail || "admin@renthub.com",
         receiver: rental.renterEmail,
+        participants: [(adminEmail || "admin@renthub.com").toLowerCase(), rental.renterEmail.toLowerCase()],
         text: `⚠️ OVERDUE NOTICE: Your rental "${rental.propertyName}" is ${getDaysOverdue(rental)} day(s) overdue. Please return the item immediately with proof of return to avoid penalties.`,
         createdAt: serverTimestamp(),
         isSystemMessage: true,
@@ -474,6 +507,7 @@ const updateRentalStatus = async (rentalId, status) => {
                 await addDoc(collection(db, "messages"), {
                   sender: adminEmail || "admin@gmail.com",
                   receiver: receiverEmail,
+                  participants: [(adminEmail || "admin@gmail.com").toLowerCase(), receiverEmail.toLowerCase()],
                   senderRole: "admin",
                   receiverRole: "owner",
                   text: `✅ Rental ${rentalData.propertyName || rentalData.name || rentalId} has been marked Completed. Earnings of ₱${earningsToAdd.toFixed(2)} were added to your balance.`,
@@ -675,6 +709,7 @@ const handleAdminSendMessage = async (ownerEmail) => {
   await addDoc(collection(db, "messages"), {
     sender: adminEmail,
     receiver: ownerEmail,
+    participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
     senderRole: "admin",
     receiverRole: "owner",
     text,
@@ -692,6 +727,7 @@ const handleAdminReply = async (ownerEmail) => {
   await addDoc(collection(db, "messages"), {
     sender: adminEmail,
     receiver: ownerEmail,
+    participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
     text,
     createdAt: serverTimestamp(),
   });
@@ -809,9 +845,53 @@ const handleDeleteAllTransactions = async () => {
 
 // ---------------- WITHDRAWAL APPROVAL ----------------
 const approveWithdrawal = async (withdrawal) => {
-  const { id, ownerEmail, amount } = withdrawal;
+  const { id, ownerEmail, amount, ownerId } = withdrawal;
   try {
-    // Update withdrawal in Firestore
+    // Find owner document ID
+    let targetOwnerUid = ownerId || withdrawal.ownerUid;
+    
+    // If no ownerId, find by email
+    if (!targetOwnerUid && ownerEmail) {
+      const ownerSnap = await getDocs(query(collection(db, "owners"), where("email", "==", ownerEmail)));
+      if (!ownerSnap.empty) {
+        targetOwnerUid = ownerSnap.docs[0].id;
+      }
+    }
+
+    if (!targetOwnerUid) {
+      alert("❌ Cannot find owner document. Withdrawal will be approved but balance won't be deducted.");
+      // Still approve the withdrawal for record purposes
+      await updateDoc(doc(db, "withdrawals", id), {
+        status: "approved",
+        approvedAt: serverTimestamp(),
+        approvedBy: adminEmail,
+      });
+      return;
+    }
+
+    // Get current owner balance
+    const ownerRef = doc(db, "owners", targetOwnerUid);
+    const ownerSnap = await getDoc(ownerRef);
+    
+    if (!ownerSnap.exists()) {
+      alert("❌ Owner document does not exist. Creating it now...");
+      await setDoc(ownerRef, { 
+        email: ownerEmail,
+        earnings: 0, 
+        totalEarnings: 0 
+      });
+    }
+
+    const ownerData = ownerSnap.exists() ? ownerSnap.data() : {};
+    const currentBalance = Number(ownerData.earnings || ownerData.totalEarnings || 0);
+    const withdrawAmount = Number(amount || 0);
+
+    // NOTE: Do not mutate owner's earnings here.
+    // The OwnerDashboard computes balance as: earnings - sum(approved withdrawals).
+    // Mutating earnings here would double-deduct.
+    const newBalance = Math.max(0, currentBalance - withdrawAmount);
+
+    // Update withdrawal status to approved
     await updateDoc(doc(db, "withdrawals", id), {
       status: "approved",
       approvedAt: serverTimestamp(),
@@ -822,85 +902,45 @@ const approveWithdrawal = async (withdrawal) => {
     await addDoc(collection(db, "messages"), {
       sender: adminEmail,
       receiver: ownerEmail,
+      participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
       senderRole: "admin",
       receiverRole: "owner",
-      text: `Your withdrawal of ₱${amount} has been approved successfully.`,
+      text: `✅ Your withdrawal of ₱${Number(amount||0).toFixed(2)} has been approved!`,
       createdAt: serverTimestamp(),
     });
 
-    alert(`Withdrawal of ₱${amount} approved and owner notified.`);
+    alert(`✅ Withdrawal approved!\n\nAmount: ₱${amount}\nPrevious Balance: ₱${currentBalance.toFixed(2)}\nNew Balance: ₱${newBalance.toFixed(2)}`);
 
   } catch (err) {
-    console.error(err);
-    alert("Failed to approve withdrawal");
+    console.error("Withdrawal approval error:", err);
+    alert("❌ Failed to approve withdrawal: " + err.message);
   }
 };
 
 const rejectWithdrawal = async (withdrawal) => {
   const { id, ownerEmail, amount } = withdrawal;
-  if (!window.confirm("Are you sure you want to reject this withdrawal? The balance will be refunded.")) return;
+  if (!window.confirm("Are you sure you want to reject this withdrawal?")) return;
 
   try {
-    const refundAmount = Number(amount || 0);
-    let targetOwnerUid = withdrawal.ownerUid || withdrawal.ownerId;
-
-    // Try local owners list by email (prefer document id over uid field)
-    if (!targetOwnerUid && withdrawal.ownerEmail && Array.isArray(owners)) {
-      const owner = owners.find(o => (o.email || "").toLowerCase() === (withdrawal.ownerEmail || "").toLowerCase());
-      // Use the Firestore document id if available, else fallback to uid/ownerId
-      targetOwnerUid = owner?.id || owner?.uid || owner?.ownerId;
-      console.log("🔎 [Reject] Resolved owner from local list:", {
-        email: withdrawal.ownerEmail,
-        chosenId: targetOwnerUid,
-        hasId: !!owner?.id,
-        hasUidField: !!owner?.uid
-      });
-    }
-
-    // Fallback: query Firestore owners by email
-    if (!targetOwnerUid && withdrawal.ownerEmail) {
-      try {
-        const snap = await getDocs(query(collection(db, "owners"), where("email", "==", withdrawal.ownerEmail)));
-        targetOwnerUid = snap.docs[0]?.id;
-      } catch (lookupErr) {
-        console.warn("Owner lookup by email failed", lookupErr);
-      }
-    }
-
-    if (!targetOwnerUid || refundAmount <= 0) {
-      setToastMessage("❌ Could not resolve owner or invalid amount");
-      setTimeout(() => setToastMessage(""), 2500);
-      return;
-    }
-
-    // Step 1: Refund earnings first
-    const ownerDocRef = doc(db, "owners", targetOwnerUid);
-    console.log("💰 [Reject] Refunding ₱" + refundAmount + " to owner:", targetOwnerUid);
-    
-    await setDoc(ownerDocRef, {
-      earnings: increment(refundAmount),
-      totalEarnings: increment(refundAmount)
-    }, { merge: true });
-    console.log("✅ [Reject] Refund successful for:", targetOwnerUid);
-
-    // Step 2: Update withdrawal status
+    // Update withdrawal status to rejected
     await updateDoc(doc(db, "withdrawals", id), {
       status: "rejected",
       rejectedAt: serverTimestamp(),
       rejectedBy: adminEmail,
     });
 
-    // Step 3: Send notification to owner
+    // Send notification to owner
     await addDoc(collection(db, "messages"), {
       sender: adminEmail,
       receiver: ownerEmail,
+      participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
       senderRole: "admin",
       receiverRole: "owner",
-      text: `✅ Your withdrawal request of ₱${refundAmount.toFixed(2)} has been rejected. The balance has been refunded to your account.`,
+      text: `❌ Your withdrawal request of ₱${Number(amount || 0).toFixed(2)} has been rejected by admin.`,
       createdAt: serverTimestamp(),
     });
 
-    setToastMessage("✅ Withdrawal rejected and balance refunded to owner");
+    setToastMessage("✅ Withdrawal rejected");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("❌ [Reject] Error:", err);

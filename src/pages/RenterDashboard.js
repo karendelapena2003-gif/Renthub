@@ -126,26 +126,37 @@ const filteredRentals = myRentals.filter((r) => {
   if (!auth.currentUser) return;
 
   const userDocRef = doc(db, "renters", auth.currentUser.uid);
-  const unsub = onSnapshot(userDocRef, (docSnap) => {
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      setUser({ ...data, uid: docSnap.id });
-      setDisplayName(data.displayName || "");
-      setPhotoPreview(data.photoURL || "/default-profile.png");
-    } else {
-      // Create initial document if it doesn't exist and mirror to shared users collection
-      const baseProfile = {
-        displayName: auth.currentUser.displayName || "",
-        email: auth.currentUser.email,
-        createdAt: serverTimestamp(),
-        photoURL: auth.currentUser.photoURL || "/default-profile.png",
-        role: "renter",
-      };
+  const unsub = onSnapshot(
+    userDocRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUser({ ...data, uid: docSnap.id });
+        setDisplayName(data.displayName || "");
+        setPhotoPreview(data.photoURL || "/default-profile.png");
+      } else {
+        // Create initial document if it doesn't exist and mirror to shared users collection
+        const baseProfile = {
+          displayName: auth.currentUser.displayName || "",
+          email: auth.currentUser.email,
+          createdAt: serverTimestamp(),
+          photoURL: auth.currentUser.photoURL || "/default-profile.png",
+          role: "renter",
+        };
 
-      setDoc(userDocRef, baseProfile, { merge: true });
-      setDoc(doc(db, "users", auth.currentUser.uid), baseProfile, { merge: true });
+        setDoc(userDocRef, baseProfile, { merge: true }).catch(err => {
+          console.error("Failed to create renter profile:", err);
+        });
+        setDoc(doc(db, "users", auth.currentUser.uid), baseProfile, { merge: true }).catch(err => {
+          console.error("Failed to mirror to users collection:", err);
+        });
+      }
+    },
+    (err) => {
+      console.error("Firestore: renter profile read denied", err);
+      // Silently fail on permission errors during initial login
     }
-  });
+  );
 
   return () => unsub();
 }, []);
@@ -153,10 +164,20 @@ const filteredRentals = myRentals.filter((r) => {
   // ------------------ AUTH ------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) return navigate("/login");
-      setUser(currentUser);
-      setDisplayName(currentUser.displayName || "");
-      setPhotoPreview(currentUser.photoURL || "/default-profile.png");
+      if (!currentUser) {
+        navigate("/login");
+        return;
+      }
+      // Don't override if renters listener already set detailed user data
+      // Auth provides basic info as fallback
+      setUser((prev) => {
+        if (prev && prev.uid === currentUser.uid && prev.role === "renter") {
+          return prev; // Keep detailed Firestore data
+        }
+        return currentUser; // Use auth data as fallback
+      });
+      setDisplayName((prev) => prev || currentUser.displayName || "");
+      setPhotoPreview((prev) => prev || currentUser.photoURL || "/default-profile.png");
       // Ensure renters land on Browse Rentals upon login
       setActivePage("browseRentals");
     });
@@ -165,75 +186,54 @@ const filteredRentals = myRentals.filter((r) => {
 
   // ------------------ FIRESTORE DATA ------------------
   useEffect(() => {
-    if (!renterEmail) return;
+    if (!renterEmail || !auth.currentUser) return;
 
     const unsubscribers = [];
 
     // Properties
-    unsubscribers.push(
-      onSnapshot(
-        query(collection(db, "properties"), where("status", "==", "approved")),
-        (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-        (err) => {
-          console.error("Firestore: properties read denied", err);
-          setToastMessage("❌ Cannot load properties (permissions)");
-          setTimeout(() => setToastMessage(""), 2500);
-        }
-      )
+    const propsUnsub = onSnapshot(
+      query(collection(db, "properties"), where("status", "==", "approved")),
+      (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => {
+        console.error("Firestore: properties read denied", err);
+        // Don't show toast for properties - might be empty on first login
+      }
     );
+    unsubscribers.push(propsUnsub);
 
     
 
     // My rentals
-    unsubscribers.push(
-      onSnapshot(
-        query(collection(db, "rentals"), where("renterEmail", "==", renterEmail)),
-        (snap) => setMyRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-        (err) => {
-          console.error("Firestore: rentals read denied", err);
-          setToastMessage("❌ Cannot load your rentals (permissions)");
-          setTimeout(() => setToastMessage(""), 2500);
-        }
-      )
+    const rentalsUnsub = onSnapshot(
+      query(collection(db, "rentals"), where("renterEmail", "==", renterEmail)),
+      (snap) => setMyRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => {
+        console.error("Firestore: rentals read denied", err);
+        // Don't show toast - might be empty for new renters
+      }
     );
+    unsubscribers.push(rentalsUnsub);
 
 
 
-    // Messages: subscribe only to threads involving this renter
-    const msgsMap = new Map();
-    const applyMsgs = () => {
-      const list = Array.from(msgsMap.values());
-      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setMessages(list);
-    };
-
-    const qSender = query(collection(db, "messages"), where("sender", "==", renterEmail));
-    const qReceiver = query(collection(db, "messages"), where("receiver", "==", renterEmail));
-
-    unsubscribers.push(
-      onSnapshot(
-        qSender,
-        (snap) => {
-          snap.docs.forEach((d) => msgsMap.set(d.id, { id: d.id, ...d.data() }));
-          applyMsgs();
-        },
-        (err) => {
-          console.error("Firestore: messages (sender) read denied", err);
-        }
-      )
+    // Messages: subscribe only to threads involving this renter (via participants)
+    const qMsgs = query(
+      collection(db, "messages"),
+      where("participants", "array-contains", renterEmail.toLowerCase())
     );
-    unsubscribers.push(
-      onSnapshot(
-        qReceiver,
-        (snap) => {
-          snap.docs.forEach((d) => msgsMap.set(d.id, { id: d.id, ...d.data() }));
-          applyMsgs();
-        },
-        (err) => {
-          console.error("Firestore: messages (receiver) read denied", err);
-        }
-      )
+    const msgsUnsub = onSnapshot(
+      qMsgs,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a, b) => (a.createdAt?.toMillis?.() ?? a.createdAt?.seconds ?? 0) - (b.createdAt?.toMillis?.() ?? b.createdAt?.seconds ?? 0));
+        setMessages(list);
+      },
+      (err) => {
+        console.error("Firestore: messages read denied", err);
+        // Don't show toast - might be empty for new renters
+      }
     );
+    unsubscribers.push(msgsUnsub);
 
     return () => unsubscribers.forEach((u) => u());
   }, [renterEmail]);
@@ -330,6 +330,8 @@ const handleCancelEdit = () => {
   setIsEditing(false);
 };
 const openOwnerProfile = useCallback((email) => {
+  if (!auth.currentUser) return;
+  
   setOwnerProfileEmail(email);
   setShowOwnerProfile(true);
   setOwnerSearchTerm("");
@@ -338,7 +340,11 @@ const openOwnerProfile = useCallback((email) => {
   if (ownerUnsubRef.current) ownerUnsubRef.current();
 
   // Subscribe to the selected owner's properties
-  const q = query(collection(db, "properties"), where("ownerEmail", "==", email));
+  const q = query(
+    collection(db, "properties"),
+    where("ownerEmail", "==", email),
+    where("status", "==", "approved")
+  );
   const unsub = onSnapshot(
     q,
     (snap) => {
@@ -373,7 +379,7 @@ const closeOwnerProfile = () => {
   // ---------- OWNER NAMES (for display) ----------
   // Subscribe to "users" documents for owner displayName when posts change
   useEffect(() => {
-    if (!posts || posts.length === 0) return;
+    if (!auth.currentUser || !posts || posts.length === 0) return;
     const emails = Array.from(new Set(posts.map((p) => p.ownerEmail).filter(Boolean)));
     const unsubscribers = [];
 
@@ -407,16 +413,17 @@ const closeOwnerProfile = () => {
   
   // ---------- COMMENTS per post (subscribe) ----------
   useEffect(() => {
-    if (!posts || posts.length === 0) return;
+    if (!auth.currentUser || !posts || posts.length === 0) return;
     const unsubArr = posts.map((post) => {
       const q = collection(db, `properties/${post.id}/comments`);
       return onSnapshot(
         q,
         (snap) => {
-          setComments((prev) => ({ ...prev, [post.id]: snap.docs.map((d) => d.data()) }));
+          setComments((prev) => ({ ...prev, [post.id]: snap.docs.map((d) => ({ id: d.id, ...d.data() })) }));
         },
         (err) => {
-          console.error("Firestore: comments read denied", err);
+          console.error("Firestore: property comments read denied for", post.id, err);
+          // Don't show toast, just log
         }
       );
     });
@@ -757,17 +764,26 @@ const handleFormChange = (e) => {
 };
 
 const handleSubmitRental = async (rental) => {
+  console.log("🔍 handleSubmitRental called");
+  console.log("📋 Form data:", rentalForm);
+  console.log("🏠 Selected rental:", rental);
+  console.log("👤 Current user:", auth.currentUser);
+
   if (!rentalForm.fullName || !rentalForm.phoneNumber || !rentalForm.address) {
+    console.warn("⚠️ Validation failed: Missing required fields");
     setToastMessage("⚠️ Please fill in all required fields");
     setTimeout(() => setToastMessage(""), 2500);
     return;
   }
 
   if (rentalForm.paymentMethod === "GCash" && !uploadedScreenshotUrl) {
+    console.warn("⚠️ Validation failed: Missing GCash screenshot");
     setToastMessage("⚠️ Please upload GCash screenshot for GCash payment");
     setTimeout(() => setToastMessage(""), 2500);
     return;
   }
+
+  console.log("✅ Validation passed, proceeding with submission");
 
   try {
     setLoading(true);
@@ -816,6 +832,9 @@ const handleSubmitRental = async (rental) => {
     const rentalRef = collection(db, "rentals");
     const propertyRef = doc(db, "properties", rental.id);
 
+    console.log("💾 Writing to Firestore...");
+    console.log("📄 Rental data:", rentalData);
+
     await Promise.all([
       addDoc(rentalRef, rentalData),
       updateDoc(propertyRef, { 
@@ -823,6 +842,8 @@ const handleSubmitRental = async (rental) => {
         isRented: (rental.currentRenters?.length || 0) + 1 >= (rental.maxRenters || 1) 
       }),
     ]);
+
+    console.log("✅ Firestore write successful!");
 
     // --- Update local admin state instantly ---
     setAdminRentalList((prev) => [...prev, { id: rental.id, ...rentalData }]);
@@ -844,8 +865,18 @@ const handleSubmitRental = async (rental) => {
     });
     setUploadedScreenshotUrl(""); // reset uploaded screenshot
   } catch (err) {
-    console.error(err);
-    setToastMessage("❌ Failed to submit rental");
+    console.error("❌ Rental submission error:", err);
+    console.error("Error code:", err.code);
+    console.error("Error message:", err.message);
+    
+    let errorMessage = "❌ Failed to submit rental";
+    if (err.code === "permission-denied") {
+      errorMessage = "❌ Permission denied. Please check your account status.";
+    } else if (err.code === "unauthenticated") {
+      errorMessage = "❌ You must be logged in to submit a rental.";
+    }
+    
+    setToastMessage(errorMessage);
     setTimeout(() => setToastMessage(""), 3500);
   } finally {
     setLoading(false);
@@ -858,13 +889,19 @@ const [gcashAccountName, setGcashAccountName] = useState("");
 const [gcashPhoneNumber, setGcashPhoneNumber] = useState("");
 
 useEffect(() => {
+  if (!auth.currentUser) return;
+  
   const fetchGcashInfo = async () => {
-    const docRef = doc(db, "settings", "gcash");
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      setGcashAccountName(data.accountName || "");
-      setGcashPhoneNumber(data.phoneNumber || "");
+    try {
+      const docRef = doc(db, "settings", "gcash");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setGcashAccountName(data.accountName || "");
+        setGcashPhoneNumber(data.phoneNumber || "");
+      }
+    } catch (err) {
+      console.error("Failed to fetch GCash settings:", err);
     }
   };
   fetchGcashInfo();
@@ -925,7 +962,8 @@ async function fixRentalImages() {
   }
 }
 
-fixRentalImages();
+// Disabled: only run manually when needed
+// fixRentalImages();
 
 async function fixMissingRentalImages() {
   const rentalsRef = collection(db, "rentals");
@@ -951,8 +989,8 @@ async function fixMissingRentalImages() {
   console.log("All missing rental images fixed!");
 }
 
-// Run the function once
-fixMissingRentalImages();
+// Disabled: only run manually when needed
+// fixMissingRentalImages();
 
 async function fixMissingDateRented() {
   const rentalsSnap = await getDocs(collection(db, "rentals"));
@@ -970,7 +1008,8 @@ async function fixMissingDateRented() {
   console.log("All missing dateRented fixed!");
 }
 
-fixMissingDateRented();
+// Disabled: only run manually when needed
+// fixMissingDateRented();
 
 const formatDate = (date) => {
   if (!date) return "N/A";
@@ -1008,7 +1047,9 @@ const [adminSearchTerm, setAdminSearchTerm] = useState(""); // optional, for sea
 
   // Fetch all rentals for admin view
 useEffect(() => {
+  // Only run if explicitly admin (not empty/undefined)
   if (userRole !== "admin") return;
+  
   const q = query(collection(db, "rentals"));
   adminUnsubRef.current = onSnapshot(
     q,
@@ -1047,6 +1088,7 @@ useEffect(() => {
       await addDoc(collection(db, "messages"), {
         sender: renterEmail,
         receiver: post.ownerEmail,
+        participants: [renterEmail.toLowerCase(), post.ownerEmail.toLowerCase()],
         text,
         propertyName: post.name,
         createdAt: serverTimestamp(),
@@ -1061,27 +1103,6 @@ useEffect(() => {
 
 
 const [ownerMessages, setOwnerMessages] = useState({});
-
-useEffect(() => {
-  const unsubscribes = posts.map(post => {
-    const q = query(
-      collection(db, "rentals", post.id, "comments"),
-      orderBy("createdAt")
-    );
-    return onSnapshot(
-      q,
-      snapshot => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setComments(prev => ({ ...prev, [post.id]: data }));
-      },
-      err => {
-        console.error("Firestore: rental comments read denied", err);
-      }
-    );
-  });
-
-  return () => unsubscribes.forEach(u => u());
-}, [posts]);
 
 
 const [comments, setComments] = useState({});
@@ -1109,7 +1130,7 @@ const handleAddComment = async (postId) => {
     imageUrl = await uploadToCloudinary(commentImages[postId], "renthub/comments");
   }
 
-  await addDoc(collection(db, "rentals", postId, "comments"), {
+  await addDoc(collection(db, "properties", postId, "comments"), {
     userId: auth.currentUser.uid,
     userName: auth.currentUser.displayName || "Anonymous",
     comment: text || "",
@@ -1126,7 +1147,7 @@ const handleAddReply = async (postId, commentId) => {
   const text = replyText[commentId]?.trim();
   if (!text) return;
 
-  await addDoc(collection(db, "rentals", postId, "comments", commentId, "replies"), {
+  await addDoc(collection(db, "properties", postId, "comments", commentId, "replies"), {
     userId: auth.currentUser.uid,
     userName: auth.currentUser.displayName || "Anonymous",
     comment: text,
@@ -1137,7 +1158,7 @@ const handleAddReply = async (postId, commentId) => {
   setShowReplyInput(prev => ({ ...prev, [commentId]: false }));
 };
 const handleEditComment = async (postId, commentId, newText) => {
-  const commentRef = doc(db, "rentals", postId, "comments", commentId);
+  const commentRef = doc(db, "properties", postId, "comments", commentId);
   await updateDoc(commentRef, { comment: newText, updatedAt: serverTimestamp() });
 };
 
@@ -1342,6 +1363,8 @@ const handleDeleteComment = (postId, commentId) => {
 
 // Subscribe to user profiles for participants in current messages
 useEffect(() => {
+  if (!auth.currentUser) return;
+  
   const unsubscribers = [];
   const participants = Array.from(new Set(messages.flatMap(m => [m.sender, m.receiver])));
   if (participants.length === 0) return;
@@ -1387,6 +1410,7 @@ useEffect(() => {
     addDoc(collection(db, "messages"), {
       sender: renterEmail,
       receiver: ownerEmail,
+      participants: [renterEmail.toLowerCase(), ownerEmail.toLowerCase()],
       text: ownerMessages[postId],
       propertyId: postId,
       createdAt: serverTimestamp(),
@@ -1407,6 +1431,7 @@ useEffect(() => {
       await addDoc(collection(db, "messages"), {
         sender: renterEmail,
         receiver: chatUser,
+        participants: [renterEmail.toLowerCase(), chatUser.toLowerCase()],
         text,
         createdAt: serverTimestamp(),
       });
@@ -1438,10 +1463,12 @@ useEffect(() => {
     }
     try {
       setLoading(true);
-      const snap = await getDocs(collection(db, "messages"));
-      const myMessages = snap.docs.filter(
-        (d) => d.data().sender === renterEmail || d.data().receiver === renterEmail
+      const q = query(
+        collection(db, "messages"),
+        where("participants", "array-contains", renterEmail.toLowerCase())
       );
+      const snap = await getDocs(q);
+      const myMessages = snap.docs;
       await Promise.all(myMessages.map((d) => deleteDoc(doc(db, "messages", d.id))));
       setMessages([]);
       setSelectedChat(null);
@@ -1459,12 +1486,18 @@ useEffect(() => {
   const handleDeleteConversation = async (chatUser) => {
     try {
       setLoading(true);
-      const snap = await getDocs(collection(db, "messages"));
-      const toDelete = snap.docs.filter(
-        (d) =>
-          (d.data().sender === renterEmail && d.data().receiver === chatUser) ||
-          (d.data().receiver === renterEmail && d.data().sender === chatUser)
+      const q = query(
+        collection(db, "messages"),
+        where("participants", "array-contains", renterEmail.toLowerCase())
       );
+      const snap = await getDocs(q);
+      const toDelete = snap.docs.filter((d) => {
+        const m = d.data();
+        return (
+          (m.sender === renterEmail && m.receiver === chatUser) ||
+          (m.receiver === renterEmail && m.sender === chatUser)
+        );
+      });
 
       await Promise.all(toDelete.map((d) => deleteDoc(doc(db, "messages", d.id))));
 
@@ -1560,14 +1593,22 @@ useEffect(() => {
   const auth = getAuth();
   const unsubscribe = onAuthStateChanged(auth, async (user) => {
     if (user) {
-      // Example: kunin ang role mula sa Firestore user document
-      const docRef = doc(db, "users", user.uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setUserRole(docSnap.data().role); // 'renter', 'owner', or 'admin'
+      try {
+        // Fetch role from Firestore user document
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setUserRole(docSnap.data().role || "renter"); // Default to renter
+        } else {
+          // New user, set default role
+          setUserRole("renter");
+        }
+      } catch (err) {
+        console.error("Failed to fetch user role:", err);
+        setUserRole("renter"); // Default to renter on error
       }
     } else {
-      setUserRole(""); // walang user
+      setUserRole("");
     }
   });
 
@@ -1641,7 +1682,7 @@ useEffect(() => {
               onClick={() => setShowSettings(!showSettings)}
               className="settings-btn"
             >
-              Settings
+              Changes Password
             </button>
           </div>
         )}

@@ -4,8 +4,7 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
     function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      return isSignedIn() && request.auth.token.email == "admin@gmail.com";
     }
     function isEmail(email) { return isSignedIn() && request.auth.token.email == email; }
 
@@ -27,15 +26,23 @@ service cloud.firestore {
 
     // Shared users collection used for roles and profiles
     match /users/{uid} {
-      allow read: if isSelf(uid) || isAdmin();
+      // Allow signed-in users to read basic profiles (displayName, photo, email, role)
+      // so messaging UIs can render avatars/names safely
+      // Allow list queries for email lookups (needed for messaging and profiles)
+      allow read, list: if isSignedIn();
       allow create, update: if isSelf(uid) || isAdmin();
     }
 
     // Properties: public reads only for approved, owner/admin full control
+    // Renters can update currentRenters and isRented fields when renting
     match /properties/{propertyId} {
       allow read: if isAdmin() || resource.data.status == "approved" || isEmail(resource.data.ownerEmail);
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || isEmail(resource.data.ownerEmail);
+      allow update: if isAdmin() || isEmail(resource.data.ownerEmail) || (
+        isSignedIn() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentRenters', 'isRented'])
+      );
+      allow delete: if isAdmin() || isEmail(resource.data.ownerEmail);
     }
 
     // Rentals: owner, renter, or admin may read/update
@@ -57,18 +64,101 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || isEmail(resource.data.authorEmail);
     }
 
-    // Messages: only participants or admin can read; sender/admin can modify/delete
-    match /messages/{messageId} {
-      allow read: if isAdmin() || isEmail(resource.data.sender) || isEmail(resource.data.receiver);
+    // Property comments and replies (mirrors rental comments rules)
+    match /properties/{propertyId}/comments/{commentId} {
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || isEmail(resource.data.sender);
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (
+          isSignedIn() &&
+          isEmail(get(/databases/$(database)/documents/properties/$(propertyId)).data.ownerEmail)
+        );
+    }
+    match /properties/{propertyId}/comments/{commentId}/replies/{replyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (
+          isSignedIn() &&
+          isEmail(get(/databases/$(database)/documents/properties/$(propertyId)).data.ownerEmail)
+        );
+    }
+
+    // Messages: only participants or admin can read; sender can modify; receiver can mark as read; either participant can delete
+    match /messages/{messageId} {
+      function isParticipant() {
+        return isSignedIn() && (
+          isEmail(resource.data.sender) ||
+          isEmail(resource.data.receiver) ||
+          (
+            resource.data.participants != null &&
+            request.auth.token.email in resource.data.participants
+          )
+        );
+      }
+      allow read: if isAdmin() || isParticipant();
+      allow create: if isSignedIn() && (
+        request.resource.data.sender == request.auth.token.email ||
+        (
+          request.resource.data.participants != null &&
+          request.auth.token.email in request.resource.data.participants
+        )
+      );
+      // Sender can update any of their message fields; receiver can only set 'read'
+      allow update: if isAdmin() ||
+        isEmail(resource.data.sender) ||
+        (
+          isEmail(resource.data.receiver) &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['read'])
+        );
+      // Either participant may delete their conversation message
+      allow delete: if isAdmin() || isParticipant();
     }
 
     // Withdrawals: owner can create/read own; admin can update/delete
     match /withdrawals/{withdrawalId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerId);
+      allow read: if isAdmin() ||
+        (isSignedIn() && request.auth.uid == resource.data.ownerId) ||
+        isEmail(resource.data.ownerEmail);
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
       allow update, delete: if isAdmin();
+    }
+
+    // Support tickets: anyone signed-in can create; only ticket owner or admin can read; only admin can modify
+    match /support_tickets/{ticketId} {
+      allow create: if isSignedIn();
+      allow read: if isAdmin() || (isSignedIn() && request.auth.token.email == resource.data.sender);
+      allow update, delete: if isAdmin();
+    }
+
+    // Settings: anyone signed-in can read; only admin can modify
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Comments and replies: authors or rental owner (post owner) can manage; any signed-in can read/create
+    match /rentals/{postId}/comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (
+          isSignedIn() &&
+          isEmail(get(/databases/$(database)/documents/rentals/$(postId)).data.ownerEmail)
+        );
+    }
+    match /rentals/{postId}/comments/{commentId}/replies/{replyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (
+          isSignedIn() &&
+          isEmail(get(/databases/$(database)/documents/rentals/$(postId)).data.ownerEmail)
+        );
     }
   }
 }
