@@ -463,8 +463,9 @@ const updateRentalStatus = async (rentalId, status) => {
         }
       }
 
-      // Fallback: find owner by email
+      // Fallback: find owner by email (case-insensitive)
       if (!ownerRef && rentalData.ownerEmail) {
+        const emailLc = rentalData.ownerEmail.toLowerCase();
         const ownerQuery = query(
           collection(db, "owners"),
           where("email", "==", rentalData.ownerEmail)
@@ -472,6 +473,15 @@ const updateRentalStatus = async (rentalId, status) => {
         const ownerSnap = await getDocs(ownerQuery);
         if (!ownerSnap.empty) {
           ownerRef = ownerSnap.docs[0].ref;
+        } else {
+          const ownerQueryLc = query(
+            collection(db, "owners"),
+            where("email", "==", emailLc)
+          );
+          const ownerSnapLc = await getDocs(ownerQueryLc);
+          if (!ownerSnapLc.empty) {
+            ownerRef = ownerSnapLc.docs[0].ref;
+          }
         }
       }
 
@@ -490,24 +500,26 @@ const updateRentalStatus = async (rentalId, status) => {
           }, { merge: true }).then(async () => {
             console.log(`✅ [Completed] Added ₱${earningsToAdd} to owner earnings`);
 
-            // Resolve owner email for the message
-            let receiverEmail = rentalData.ownerEmail || "";
-            if (!receiverEmail) {
-              try {
-                const ownerDocSnap = await getDoc(ownerRef);
-                receiverEmail = ownerDocSnap.data()?.email || "";
-              } catch (e) {
-                console.warn("⚠️ [Completed] Failed to read owner email for message", e);
-              }
+            // Resolve owner email for the message (prefer owner doc, fallback to rental fields)
+            let receiverEmail = "";
+            try {
+              const ownerDocSnap = await getDoc(ownerRef);
+              receiverEmail = ownerDocSnap.data()?.email || "";
+            } catch (e) {
+              console.warn("⚠️ [Completed] Failed to read owner email for message", e);
             }
+            if (!receiverEmail && rentalData.ownerEmail) receiverEmail = rentalData.ownerEmail;
+            if (!receiverEmail && rentalData.ownerEmailLower) receiverEmail = rentalData.ownerEmailLower;
 
             // Send message to owner confirming earnings were added
             if (receiverEmail) {
               try {
+                const senderEmail = adminEmail || "admin@gmail.com";
+                const receiverLc = receiverEmail.toLowerCase();
                 await addDoc(collection(db, "messages"), {
-                  sender: adminEmail || "admin@gmail.com",
+                  sender: senderEmail,
                   receiver: receiverEmail,
-                  participants: [(adminEmail || "admin@gmail.com").toLowerCase(), receiverEmail.toLowerCase()],
+                  participants: [senderEmail.toLowerCase(), receiverLc],
                   senderRole: "admin",
                   receiverRole: "owner",
                   text: `✅ Rental ${rentalData.propertyName || rentalData.name || rentalId} has been marked Completed. Earnings of ₱${earningsToAdd.toFixed(2)} were added to your balance.`,

@@ -1559,59 +1559,76 @@ const [confirmPassword, setConfirmPassword] = useState("");
     provider => provider.providerId === "google.com"
   );
 
-  // For users with existing password, require current password
-  if (hasPasswordProvider && !currentPassword) {
-    setToastMessage("⚠️ Please enter your current password");
-    setTimeout(() => setToastMessage(""), 2500);
-    return;
-  }
-
-  if (!newPassword || !confirmPassword) {
-    setToastMessage("⚠️ Please fill in all fields");
-    setTimeout(() => setToastMessage(""), 2500);
-    return;
-  }
-
-  if (newPassword !== confirmPassword) {
-    setToastMessage("⚠️ Passwords do not match");
-    setTimeout(() => setToastMessage(""), 2500);
-    return;
-  }
-
-  if (newPassword.length < 6) {
-    setToastMessage("⚠️ Password must be at least 6 characters");
-    setTimeout(() => setToastMessage(""), 2500);
-    return;
-  }
+  setPasswordLoading(true);
 
   try {
-    setPasswordLoading(true);
+    // If user has Google provider, use Google popup to authenticate
+    if (hasGoogleProvider) {
+      const provider = new GoogleAuthProvider();
+      await reauthenticateWithPopup(user, provider);
+      
+      // If also has password provider, ask if they want to change it
+      if (hasPasswordProvider) {
+        // Show form to set new password
+        setToastMessage("✅ Authenticated! Now enter your new password below");
+        setTimeout(() => setToastMessage(""), 3000);
+        setPasswordLoading(false);
+        return;
+      } else {
+        // Google-only user, just confirm
+        setToastMessage("✅ Password confirmed via Google! Your account is secure.");
+        setTimeout(() => setToastMessage(""), 3000);
+        setShowSettings(false);
+        setPasswordLoading(false);
+        return;
+      }
+    } 
+    // If user only has password, require current password
+    else if (hasPasswordProvider) {
+      if (!currentPassword) {
+        setToastMessage("⚠️ Please enter your current password");
+        setTimeout(() => setToastMessage(""), 2500);
+        setPasswordLoading(false);
+        return;
+      }
 
-    // If user has password provider, re-authenticate with password
-    if (hasPasswordProvider && currentPassword) {
+      if (!newPassword || !confirmPassword) {
+        setToastMessage("⚠️ Please fill in all fields");
+        setTimeout(() => setToastMessage(""), 2500);
+        setPasswordLoading(false);
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        setToastMessage("⚠️ Passwords do not match");
+        setTimeout(() => setToastMessage(""), 2500);
+        setPasswordLoading(false);
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        setToastMessage("⚠️ Password must be at least 6 characters");
+        setTimeout(() => setToastMessage(""), 2500);
+        setPasswordLoading(false);
+        return;
+      }
+
       const credential = EmailAuthProvider.credential(
         user.email,
         currentPassword
       );
       await reauthenticateWithCredential(user, credential);
-    } 
-    // If Google user wants to set password, re-authenticate with Google popup
-    else if (hasGoogleProvider && !hasPasswordProvider) {
-      const provider = new GoogleAuthProvider();
-      await reauthenticateWithPopup(user, provider);
+
+      // Update password
+      await updatePassword(user, newPassword);
+
+      setToastMessage("✅ Password updated successfully!");
+      setTimeout(() => setToastMessage(""), 3000);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowSettings(false);
     }
-
-    // Update/Set password
-    await updatePassword(user, newPassword);
-
-    setToastMessage(hasPasswordProvider 
-      ? "✅ Password updated successfully!" 
-      : "✅ Password set successfully! You can now login with email/password");
-    setTimeout(() => setToastMessage(""), 3000);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowSettings(false);
   } catch (error) {
     console.error("Password change error:", error);
     if (error.code === "auth/wrong-password") {
