@@ -458,22 +458,15 @@ useEffect(() => {
 
   // Delete individual earning
   const handleDeleteEarning = async (rentalId, amount) => {
-    if (!window.confirm("🗑️ Delete this earning? This will deduct ₱" + amount.toFixed(2) + " from your balance.")) return;
+    // UI-only: hide this earning from Owner's Individual Earnings list (no dialog)
     try {
-      await deleteDoc(doc(db, "rentals", rentalId));
-      
-      // Deduct amount from owner's balance
-      await updateDoc(doc(db, "owners", auth.currentUser.uid), {
-        totalEarnings: earnings - amount,
-      });
-      
-      setCompletedRentals(prev => prev.filter(r => r.id !== rentalId));
-      setToastMessage("✅ Earning deleted successfully");
-      setTimeout(() => setToastMessage(""), 2500);
+      setHiddenEarningIds(prev => new Set(prev).add(rentalId));
+      setEarningsFeedback("✅ Successfully deleted from Individual Earnings");
+      setTimeout(() => setEarningsFeedback(""), 2000);
     } catch (err) {
       console.error(err);
-      setToastMessage("❌ Failed to delete earning");
-      setTimeout(() => setToastMessage(""), 3500);
+      setEarningsFeedback("❌ Failed to hide earning");
+      setTimeout(() => setEarningsFeedback(""), 3000);
     }
   };
 
@@ -579,30 +572,108 @@ const [replyText, setReplyText] = useState({});     // Message input text
 const currentUserEmail = auth.currentUser?.email;
 
 
-// 1️⃣ Listen for real-time total earnings
+  // 1️⃣ Listen for real-time owner earnings (current balance)
   useEffect(() => {
     if (!ownerId) return;
     const ownerRef = doc(db, "owners", ownerId);
-    const unsub = onSnapshot(ownerRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setEarnings(Number(docSnap.data().totalEarnings || 0));
-      }
+    
+    // Ensure owner doc exists with proper fields
+    setDoc(ownerRef, {
+      earnings: 0,
+      totalEarnings: 0
+    }, { merge: true }).catch(err => {
+      console.warn("Could not initialize owner doc:", err.message);
     });
+
+    const unsub = onSnapshot(
+      ownerRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const currentBalance = Number((data && (data.earnings ?? data.totalEarnings)) ?? 0);
+          setEarnings(currentBalance);
+          console.log("✅ [Owner Earnings] Updated balance:", currentBalance, "ownerId:", ownerId, "doc earnings:", data?.earnings, "doc totalEarnings:", data?.totalEarnings);
+        } else {
+          console.warn("⚠️ [Owner Earnings] Owner doc does not exist:", ownerId);
+          setEarnings(0);
+        }
+      },
+      (error) => {
+        console.error("❌ [Owner Earnings] Subscription error:", error.code, error.message);
+        setToastMessage("⚠️ Cannot load earnings (permission/connection issue)");
+        setTimeout(() => setToastMessage(""), 3000);
+      }
+    );
     return () => unsub();
   }, [ownerId]);
 
-  // 2️⃣ Fetch withdrawals
+  // 2️⃣ Fetch withdrawals (live) by ownerId and (fallback) ownerEmail, merge results
   useEffect(() => {
-    if (!ownerId) return;
+    if (!ownerId && !ownerEmail) return;
 
-    const q = query(collection(db, "withdrawals"), where("ownerId", "==", ownerId));
-    const fetchWithdrawals = async () => {
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setWithdrawals(data);
+    const unsubs = [];
+    let latestById = [];
+    let latestByEmail = [];
+
+    const pushMerged = () => {
+      const mergedMap = new Map();
+      [...latestById, ...latestByEmail].forEach(item => {
+        if (!mergedMap.has(item.id)) mergedMap.set(item.id, item);
+      });
+      const merged = Array.from(mergedMap.values()).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setWithdrawals(merged);
+      console.log("📊 Owner withdrawals merged:", {
+        byId: latestById.length,
+        byEmail: latestByEmail.length,
+        merged: merged.length
+      });
     };
-    fetchWithdrawals();
-  }, [ownerId]);
+
+    if (ownerId) {
+      const q1 = query(
+        collection(db, "withdrawals"),
+        where("ownerId", "==", ownerId),
+        orderBy("createdAt", "desc")
+      );
+      const u1 = onSnapshot(
+        q1,
+        (snapshot) => {
+          latestById = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          pushMerged();
+        },
+        (error) => {
+          console.error("❌ Withdrawals (by ownerId) subscription error:", error);
+          setToastMessage("⚠️ Unable to load withdrawals by ownerId.");
+          setTimeout(() => setToastMessage(""), 3000);
+        }
+      );
+      unsubs.push(u1);
+    }
+
+    if (ownerEmail) {
+      const q2 = query(
+        collection(db, "withdrawals"),
+        where("ownerEmail", "==", ownerEmail),
+        orderBy("createdAt", "desc")
+      );
+      const u2 = onSnapshot(
+        q2,
+        (snapshot) => {
+          latestByEmail = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          pushMerged();
+        },
+        (error) => {
+          console.error("❌ Withdrawals (by ownerEmail) subscription error:", error);
+          // don't toast twice if byId already worked
+        }
+      );
+      unsubs.push(u2);
+    }
+
+    return () => {
+      unsubs.forEach(u => u && u());
+    };
+  }, [ownerId, ownerEmail]);
 
   // 2.5️⃣ Fetch completed rentals/earnings for owner
   useEffect(() => {
@@ -621,18 +692,21 @@ const currentUserEmail = auth.currentUser?.email;
       console.log("📋 Rentals Data:", rentalData);
       setCompletedRentals(rentalData);
       
-      // Fetch renter photos
+      // Fetch renter photos (case-safe by email key)
       const photos = {};
       for (const rental of rentalData) {
         if (rental.renterEmail) {
           try {
+            const emailRaw = String(rental.renterEmail).trim();
+            const emailKey = emailRaw.toLowerCase();
             const usersQuery = query(
               collection(db, "users"),
-              where("email", "==", rental.renterEmail)
+              where("email", "==", emailRaw)
             );
             const userSnap = await getDocs(usersQuery);
             if (!userSnap.empty) {
-              photos[rental.renterEmail] = userSnap.docs[0].data().photoURL || "/default-profile.png";
+              const data = userSnap.docs[0].data();
+              photos[emailKey] = data.photoURL || "/default-profile.png";
             }
           } catch (err) {
             console.error("Error fetching renter photo:", err);
@@ -644,6 +718,23 @@ const currentUserEmail = auth.currentUser?.email;
     
     return () => unsub();
   }, [ownerEmail]);
+
+  // 2.6️⃣ Fallback: derive earnings from completed rentals if doc balance is 0
+  useEffect(() => {
+    if (!completedRentals || completedRentals.length === 0) return;
+    if (earnings > 0) return; // respect server balance when available
+
+    const sumCompleted = completedRentals.reduce((sum, r) => {
+      const daily = Number(r.dailyRate || 0);
+      const days = Number(r.rentalDays || 1);
+      return sum + (daily * days);
+    }, 0);
+
+    if (sumCompleted > 0) {
+      console.log("ℹ️ [Owner Earnings Fallback] Using completed rentals sum:", sumCompleted);
+      setEarnings(sumCompleted);
+    }
+  }, [completedRentals, earnings]);
 
 const totalWithdrawn = withdrawals
     .filter(w => w.status !== "rejected")
@@ -658,8 +749,59 @@ const totalWithdrawn = withdrawals
   const [withdrawAccountName, setWithdrawAccountName] = useState("");
   const [withdrawPhone, setWithdrawPhone] = useState("");
   const [withdrawPassword, setWithdrawPassword] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 const [showWithdrawForm, setShowWithdrawForm] = useState(false);
 const [showWithdrawals, setShowWithdrawals] = useState(false); // State for toggling visibility
+// Inline feedback for Withdrawal History actions
+const [historyFeedback, setHistoryFeedback] = useState("");
+// Inline feedback for Individual Earnings actions
+const [earningsFeedback, setEarningsFeedback] = useState("");
+// Hide approved withdrawals by default
+const [hideApproved, setHideApproved] = useState(true);
+
+// Locally hidden earnings (UI-only for Individual Earnings), persisted to localStorage
+const [hiddenEarningIds, setHiddenEarningIds] = useState(() => {
+  try {
+    const raw = localStorage.getItem("hiddenEarningIds");
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+});
+
+useEffect(() => {
+  try {
+    localStorage.setItem("hiddenEarningIds", JSON.stringify(Array.from(hiddenEarningIds)));
+  } catch {}
+}, [hiddenEarningIds]);
+// Locally hidden withdrawals (UI-only); persisted to localStorage
+const [hiddenWithdrawalIds, setHiddenWithdrawalIds] = useState(() => {
+  try {
+    const raw = localStorage.getItem("hiddenWithdrawalIds");
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+});
+
+useEffect(() => {
+  try {
+    localStorage.setItem(
+      "hiddenWithdrawalIds",
+      JSON.stringify(Array.from(hiddenWithdrawalIds))
+    );
+  } catch {}
+}, [hiddenWithdrawalIds]);
+
+const handleHideWithdrawal = (withdrawalId) => {
+  if (!withdrawalId) return;
+  setHiddenWithdrawalIds(prev => new Set(prev).add(withdrawalId));
+  // Show inline success on the side, no top toast
+  setHistoryFeedback("✅ Successfully deleted from history");
+  setTimeout(() => setHistoryFeedback(""), 2000);
+};
 
 const handleWithdraw = async () => {
     if (!withdrawMethod || !withdrawAccountName || !withdrawPhone) {
@@ -674,7 +816,22 @@ const handleWithdraw = async () => {
       return;
     }
 
-    const amountToWithdraw = Number(balance);
+    const amountToWithdraw = Number(withdrawAmount);
+    if (!amountToWithdraw || isNaN(amountToWithdraw)) {
+      setToastMessage("⚠️ Enter a valid withdrawal amount");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
+    if (amountToWithdraw < 500) {
+      setToastMessage("⚠️ Minimum withdrawal amount is ₱500");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
+    if (amountToWithdraw > balance) {
+      setToastMessage("⚠️ Amount exceeds current balance");
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
 
     try {
       await addDoc(collection(db, "withdrawals"), {
@@ -688,10 +845,7 @@ const handleWithdraw = async () => {
         createdAt: serverTimestamp(),
       });
 
-      // Reset owner's balance to 0
-      await updateDoc(doc(db, "owners", auth.currentUser.uid), {
-        totalEarnings: 0,
-      });
+      // Do not zero out balance on pending request; admin will approve/reject
 
       setToastMessage("✅ Withdrawal request submitted!");
       setTimeout(() => {
@@ -699,6 +853,7 @@ const handleWithdraw = async () => {
         setWithdrawMethod("");
         setWithdrawAccountName("");
         setWithdrawPhone("");
+        setWithdrawAmount("");
         setShowWithdrawForm(false);
         setToastMessage("");
       }, 1500);
@@ -1250,7 +1405,16 @@ useEffect(() => {
       
       <button
         className="withdraw-btn"
-        onClick={() => setShowWithdrawForm(prev => !prev)}
+        onClick={() => {
+          setShowWithdrawForm(prev => {
+            const next = !prev;
+            if (next) {
+              // Open form with empty amount so user can type freely
+              setWithdrawAmount("");
+            }
+            return next;
+          });
+        }}
         disabled={balance < 500}
       >
         {showWithdrawForm ? "Cancel" : "Withdraw Now"}
@@ -1266,13 +1430,15 @@ useEffect(() => {
           <h4>Withdrawal Details</h4>
           
           <div className="form-group">
-            <label>Amount to Withdraw:</label>
+            <label>Amount to Withdraw: *</label>
             <input 
-              type="text" 
-              value={`₱${balance.toFixed(2)}`} 
-              disabled 
-              className="withdraw-amount-display"
+              type="number" 
+              step="0.01"
+              value={withdrawAmount}
+              onChange={e => setWithdrawAmount(e.target.value)}
+              placeholder="Enter amount (min ₱500)"
             />
+            <small className="withdraw-amount-hint">Min ₱500, Max ₱{balance.toFixed(2)}</small>
           </div>
 
           <div className="form-group">
@@ -1313,7 +1479,16 @@ useEffect(() => {
           <div className="form-actions">
             <button 
               className="confirm-withdraw-btn"
-              disabled={balance < 500 || !withdrawMethod || !withdrawAccountName || !withdrawPhone} 
+              disabled={
+                balance < 500 ||
+                !withdrawMethod ||
+                !withdrawAccountName ||
+                !withdrawPhone ||
+                !withdrawAmount ||
+                isNaN(Number(withdrawAmount)) ||
+                Number(withdrawAmount) < 500 ||
+                Number(withdrawAmount) > balance
+              } 
               onClick={handleWithdraw}
             >
                Confirm Withdrawal
@@ -1325,6 +1500,7 @@ useEffect(() => {
                 setWithdrawMethod("");
                 setWithdrawAccountName("");
                 setWithdrawPhone("");
+                setWithdrawAmount("");
               }}
             >
               Cancel
@@ -1337,6 +1513,9 @@ useEffect(() => {
     {/* Withdrawal History Section */}
     <div className="withdrawal-history-section">
       <h3>Withdrawal History</h3>
+      {historyFeedback && (
+        <p className="inline-success" role="status">{historyFeedback}</p>
+      )}
       <button 
         className="toggle-btn" 
         onClick={toggleWithdrawals}
@@ -1348,14 +1527,31 @@ useEffect(() => {
       </button>
 
       {showWithdrawals && (
-        <div className="withdrawals-list">
-          {withdrawals.length === 0 ? (
-            <p className="empty-message"> No withdrawal history yet.</p>
-          ) : (
-            <>
-              {withdrawals
-                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-                .map(w => (
+        <>
+          <div className="history-controls" style={{ marginTop: 10, marginBottom: 10 }}>
+            <label style={{ fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={hideApproved}
+                onChange={(e) => setHideApproved(e.target.checked)}
+                style={{ marginRight: 6 }}
+              />
+              Hide Approved
+            </label>
+          </div>
+          <div className="withdrawals-list">
+            {withdrawals
+              .filter(w => !hiddenWithdrawalIds.has(w.id))
+              .filter(w => !hideApproved || w.status !== "approved")
+              .length === 0 ? (
+              <p className="empty-message"> No withdrawal history yet.</p>
+            ) : (
+              <>
+                {withdrawals
+                  .filter(w => !hiddenWithdrawalIds.has(w.id))
+                  .filter(w => !hideApproved || w.status !== "approved")
+                  .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                  .map(w => (
                   <div key={w.id} className="withdrawal-item">
                     <div className="withdrawal-header">
                       <span className={`status-badge ${w.status}`}>
@@ -1386,25 +1582,30 @@ useEffect(() => {
                       </div>
                     </div>
                     
-                    {/* Delete Button */}
+                    {/* Delete from history (UI-only) */}
                     <button 
                       className="delete-withdrawal-btn"
-                      onClick={() => handleDeleteWithdrawal(w.id)}
+                      onClick={() => handleHideWithdrawal(w.id)}
+                      title="Delete from history (does not affect earnings)"
                     >
                       Delete
                     </button>
                   </div>
-                ))
-              }
-            </>
-          )}
-        </div>
+                  ))
+                }
+              </>
+            )}
+          </div>
+        </>
       )}
     </div>
 
     {/* Individual Earnings Section */}
     <div className="individual-earnings-section">
       <h3>Individual Earnings</h3>
+      {earningsFeedback && (
+        <p className="inline-success" role="status">{earningsFeedback}</p>
+      )}
       <button className="toggle-btn" onClick={() => setShowIndividualEarnings(prev => !prev)}>
         {showIndividualEarnings ? "Hide Individual Earnings" : "Show Individual Earnings"}
       </button>
@@ -1418,19 +1619,12 @@ useEffect(() => {
             </div>
           ) : (
             <>
-              {/* Delete All Button */}
-              <button 
-                onClick={handleDeleteAllEarnings}
-                className="delete-all-earnings-btn"
-              >
-                 Clear All Earnings History
-              </button>
-
               {/* Individual Earnings Items */}
               <div className="earnings-items-container">
                 <h4>Completed Earnings ({completedRentals.length})</h4>
                 <p className="earnings-hint">Each rental completed by admin:</p>
                 {completedRentals
+                  .filter(r => !hiddenEarningIds.has(r.id))
                   .sort((a, b) => (b.completedAt?.seconds || 0) - (a.completedAt?.seconds || 0))
                   .map((rental, index) => (
                     <div key={rental.id} className="earnings-item">
@@ -1457,10 +1651,17 @@ useEffect(() => {
                         <div className="detail-row">
                           <strong>Renter:</strong>
                           <div className="renter-info">
-                            {renterPhotos[rental.renterEmail] && (
-                              <img src={renterPhotos[rental.renterEmail]} alt="Renter" className="renter-photo" />
+                            {rental.renterEmail && renterPhotos[(rental.renterEmail || "").toLowerCase()] && (
+                              <img
+                                src={renterPhotos[(rental.renterEmail || "").toLowerCase()]}
+                                alt="Renter"
+                                className="renter-photo"
+                                onError={(e) => {
+                                  e.target.src = "/default-profile.png";
+                                }}
+                              />
                             )}
-                            <span>{rental.renterEmail || "N/A"}</span>
+                            <span>{rental.renterName || rental.renterEmail || "N/A"}</span>
                           </div>
                         </div>
                         <div className="detail-row">

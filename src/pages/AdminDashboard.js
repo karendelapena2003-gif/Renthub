@@ -442,7 +442,7 @@ const updateRentalStatus = async (rentalId, status) => {
         }
       }
 
-      // Update earnings using increment()
+      // Update earnings using increment(), then notify owner via message
       if (ownerRef) {
         // Owner gets only: dailyRate × rentalDays (no service fee or delivery fee)
         const dailyRate = Number(rentalData.dailyRate || 0);
@@ -450,11 +450,47 @@ const updateRentalStatus = async (rentalId, status) => {
         const earningsToAdd = dailyRate * rentalDays;
 
         if (earningsToAdd > 0) {
-          await updateDoc(ownerRef, {
+          console.log(`💰 [Completed] Adding ₱${earningsToAdd} to owner earnings (${dailyRate} × ${rentalDays} days)`);
+          await setDoc(ownerRef, {
+            earnings: increment(earningsToAdd),
             totalEarnings: increment(earningsToAdd),
+          }, { merge: true }).then(async () => {
+            console.log(`✅ [Completed] Added ₱${earningsToAdd} to owner earnings`);
+
+            // Resolve owner email for the message
+            let receiverEmail = rentalData.ownerEmail || "";
+            if (!receiverEmail) {
+              try {
+                const ownerDocSnap = await getDoc(ownerRef);
+                receiverEmail = ownerDocSnap.data()?.email || "";
+              } catch (e) {
+                console.warn("⚠️ [Completed] Failed to read owner email for message", e);
+              }
+            }
+
+            // Send message to owner confirming earnings were added
+            if (receiverEmail) {
+              try {
+                await addDoc(collection(db, "messages"), {
+                  sender: adminEmail || "admin@gmail.com",
+                  receiver: receiverEmail,
+                  senderRole: "admin",
+                  receiverRole: "owner",
+                  text: `✅ Rental ${rentalData.propertyName || rentalData.name || rentalId} has been marked Completed. Earnings of ₱${earningsToAdd.toFixed(2)} were added to your balance.`,
+                  createdAt: serverTimestamp(),
+                });
+              } catch (msgErr) {
+                console.warn("❌ [Completed] Failed to send earnings message to owner:", msgErr);
+              }
+            } else {
+              console.warn("⚠️ [Completed] Owner email not available; message not sent");
+            }
+          }).catch((err) => {
+            console.warn(`❌ [Completed] Could not update owner earnings:`, err.code, err.message);
           });
-          console.log(`✅ Added ₱${earningsToAdd} to owner earnings (${dailyRate} × ${rentalDays} days)`);
         }
+      } else {
+        console.warn(`⚠️ [Completed] Could not find owner for rental:`, rentalData.ownerId || rentalData.ownerEmail);
       }
     }
   } catch (err) {
@@ -805,21 +841,20 @@ const rejectWithdrawal = async (withdrawal) => {
   if (!window.confirm("Are you sure you want to reject this withdrawal? The balance will be refunded.")) return;
 
   try {
-    // Update withdrawal status
-    await updateDoc(doc(db, "withdrawals", id), {
-      status: "rejected",
-      rejectedAt: serverTimestamp(),
-      rejectedBy: adminEmail,
-    });
-
-    // Refund balance back to owner's earnings (resolve owner doc even if ownerUid missing)
     const refundAmount = Number(amount || 0);
-    let targetOwnerUid = withdrawal.ownerUid || withdrawal.ownerId; // prefer explicit uid/id on record
+    let targetOwnerUid = withdrawal.ownerUid || withdrawal.ownerId;
 
-    // Try local owners list by email
+    // Try local owners list by email (prefer document id over uid field)
     if (!targetOwnerUid && withdrawal.ownerEmail && Array.isArray(owners)) {
       const owner = owners.find(o => (o.email || "").toLowerCase() === (withdrawal.ownerEmail || "").toLowerCase());
-      targetOwnerUid = owner?.uid;
+      // Use the Firestore document id if available, else fallback to uid/ownerId
+      targetOwnerUid = owner?.id || owner?.uid || owner?.ownerId;
+      console.log("🔎 [Reject] Resolved owner from local list:", {
+        email: withdrawal.ownerEmail,
+        chosenId: targetOwnerUid,
+        hasId: !!owner?.id,
+        hasUidField: !!owner?.uid
+      });
     }
 
     // Fallback: query Firestore owners by email
@@ -832,32 +867,45 @@ const rejectWithdrawal = async (withdrawal) => {
       }
     }
 
-    if (targetOwnerUid && refundAmount > 0) {
-      await updateDoc(doc(db, "owners", targetOwnerUid), {
-        earnings: increment(refundAmount),
-        totalEarnings: increment(refundAmount)
-      }).catch(() => {
-        // If owner doc doesn't exist, just log it
-        console.warn("Could not update owner earnings for refund");
-      });
+    if (!targetOwnerUid || refundAmount <= 0) {
+      setToastMessage("❌ Could not resolve owner or invalid amount");
+      setTimeout(() => setToastMessage(""), 2500);
+      return;
     }
 
-    // Send notification to owner
+    // Step 1: Refund earnings first
+    const ownerDocRef = doc(db, "owners", targetOwnerUid);
+    console.log("💰 [Reject] Refunding ₱" + refundAmount + " to owner:", targetOwnerUid);
+    
+    await setDoc(ownerDocRef, {
+      earnings: increment(refundAmount),
+      totalEarnings: increment(refundAmount)
+    }, { merge: true });
+    console.log("✅ [Reject] Refund successful for:", targetOwnerUid);
+
+    // Step 2: Update withdrawal status
+    await updateDoc(doc(db, "withdrawals", id), {
+      status: "rejected",
+      rejectedAt: serverTimestamp(),
+      rejectedBy: adminEmail,
+    });
+
+    // Step 3: Send notification to owner
     await addDoc(collection(db, "messages"), {
       sender: adminEmail,
       receiver: ownerEmail,
       senderRole: "admin",
       receiverRole: "owner",
-      text: `Your withdrawal request of ₱${amount} has been rejected. The balance has been refunded to your account.`,
+      text: `✅ Your withdrawal request of ₱${refundAmount.toFixed(2)} has been rejected. The balance has been refunded to your account.`,
       createdAt: serverTimestamp(),
     });
 
-    setToastMessage("✅ Withdrawal rejected and balance refunded");
+    setToastMessage("✅ Withdrawal rejected and balance refunded to owner");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
-    console.error(err);
-    setToastMessage("❌ Failed to reject withdrawal");
-    setTimeout(() => setToastMessage(""), 2500);
+    console.error("❌ [Reject] Error:", err);
+    setToastMessage("❌ Failed to reject withdrawal: " + err.message);
+    setTimeout(() => setToastMessage(""), 3000);
   }
 };
 

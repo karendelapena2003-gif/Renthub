@@ -13,11 +13,11 @@ service cloud.firestore {
     match /owners/{ownerUid} {
       allow read: if isSelf(ownerUid) || isAdmin();
       allow create: if isSelf(ownerUid);
-      allow update: if (
+      allow update: if isAdmin() || (
         isSelf(ownerUid) &&
         request.resource.data.earnings == resource.data.earnings &&
         request.resource.data.totalEarnings == resource.data.totalEarnings
-      ) || isAdmin();
+      );
     }
 
     // Renters collection: renter or admin access

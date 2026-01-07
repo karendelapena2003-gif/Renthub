@@ -1565,6 +1565,13 @@
   min-width: 100px;
 }
 
+/* Ensure withdrawal status text appears black for these states */
+.owner-dashboard .withdrawals-list .status-badge.approved,
+.owner-dashboard .withdrawals-list .status-badge.pending,
+.owner-dashboard .withdrawals-list .status-badge.rejected {
+  color: #000;
+}
+
 /* ===== WITHDRAWAL DELETE BUTTON ===== */
 .owner-dashboard .delete-withdrawal-btn {
   max-width: 150px;
@@ -1589,6 +1596,17 @@
 
 .owner-dashboard .delete-withdrawal-btn:active {
   transform: translateY(0);
+}
+
+/* Inline success/info message within sections */
+.owner-dashboard .inline-success {
+  margin: 8px 0 12px 0;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  color: #1b5e20;
+  border-left: 4px solid #4caf50;
+  border-radius: 6px;
+  font-size: 13px;
 }
 /* ===== OWNER MY RENTALS (VIEW ONLY) ===== */
 
