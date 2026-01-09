@@ -1011,20 +1011,33 @@ useEffect(() => {
       if (email && email !== "renthub-support") {
         try {
           console.log("🔍 Fetching photo for:", email);
-          const usersQuery = query(
-            collection(db, "users"),
-            where("email", "==", email)
-          );
-          const userSnap = await getDocs(usersQuery);
-          if (!userSnap.empty) {
-            const userData = userSnap.docs[0].data();
-            const photoURL = userData.photoURL;
-            photos[email] = photoURL || "/default-profile.png";
-            console.log("✅ Photo found for", email, ":", photoURL);
-          } else {
-            console.log("⚠️ No user document found in Firestore for:", email);
-            photos[email] = "/default-profile.png";
+          const emailLc = email.toLowerCase();
+
+          // Try exact match on users.email
+          let userSnap = await getDocs(query(collection(db, "users"), where("email", "==", email)));
+
+          // Fallback: match on users.emailLower (if stored)
+          if (userSnap.empty) {
+            userSnap = await getDocs(query(collection(db, "users"), where("emailLower", "==", emailLc)));
           }
+
+          // Last fallback: renters collection
+          let userData = null;
+          if (!userSnap.empty) {
+            userData = userSnap.docs[0].data();
+          } else {
+            const renterSnap = await getDocs(query(collection(db, "renters"), where("email", "==", email)));
+            const renterSnapLc = renterSnap.empty
+              ? await getDocs(query(collection(db, "renters"), where("emailLower", "==", emailLc)))
+              : renterSnap;
+            if (!renterSnapLc.empty) {
+              userData = renterSnapLc.docs[0].data();
+            }
+          }
+
+          const photoURL = userData?.photoURL;
+          photos[email] = photoURL || "/default-profile.png";
+          console.log("✅ Photo resolved for", email, ":", photos[email]);
         } catch (err) {
           console.error("❌ Error fetching user photo for", email, ":", err);
           photos[email] = "/default-profile.png";
@@ -1690,19 +1703,7 @@ useEffect(() => {
                         </div>
                         <div className="detail-row">
                           <strong>Renter:</strong>
-                          <div className="renter-info">
-                            {rental.renterEmail && renterPhotos[(rental.renterEmail || "").toLowerCase()] && (
-                              <img
-                                src={renterPhotos[(rental.renterEmail || "").toLowerCase()]}
-                                alt="Renter"
-                                className="renter-photo"
-                                onError={(e) => {
-                                  e.target.src = "/default-profile.png";
-                                }}
-                              />
-                            )}
-                            <span>{rental.renterName || rental.renterEmail || "N/A"}</span>
-                          </div>
+                          <span>{rental.renterEmail || rental.renterName || "N/A"}</span>
                         </div>
                         <div className="detail-row">
                           <strong>Completed:</strong>

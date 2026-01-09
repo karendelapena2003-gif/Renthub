@@ -883,8 +883,20 @@ body {
 ================================ */
 .admin-renter-items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 300px));
+  grid-template-columns: repeat(3, 1fr); /* Whole screen: 3 cards */
   gap: 16px;
+}
+
+@media (min-width: 600px) and (max-width: 950px) {
+  .admin-renter-items {
+    grid-template-columns: repeat(2, 1fr); /* Split screen: 2 cards */
+  }
+}
+
+@media (max-width: 599px) {
+  .admin-renter-items {
+    grid-template-columns: 1fr; /* Mobile: 1 card */
+  }
 }
 
 .admin-rental-card {

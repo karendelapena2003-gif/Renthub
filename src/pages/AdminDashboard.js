@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Sidebar from "./Sidebar";
 import "./AdminDashboard.css";
 import { auth, db } from "../firebase";
@@ -370,18 +370,27 @@ const AdminDashboard = ({ onLogout }) => {
 
   
   /* ---------------- rentals grouping & modal helpers ---------------- */
-  const rentalsByRenter = usersList
-    .filter((u) => u.role === "renter")
-    .map((r) => {
-      const items = rentals.filter((t) => t.renterEmail === r.email);
-      return { renter: r, items, total: items.reduce((s, it) => s + Number(it.price || 0), 0) };
-    })
-    .filter((g) => g.items.length > 0);
+  const rentalsByRenter = useMemo(() => {
+    const grouped = rentals.reduce((acc, rental) => {
+      const key = rental.renterEmail || rental.renterUid || rental.renterId || "unknown-renter";
+      if (!acc[key]) {
+        const renterProfile = usersList.find((u) => u.email === rental.renterEmail) || {};
+        acc[key] = { renter: renterProfile, items: [], total: 0 };
+      }
+
+      acc[key].items.push(rental);
+      const price = Number(rental.price || rental.totalAmount || rental.dailyRate || 0);
+      acc[key].total += Number.isNaN(price) ? 0 : price;
+      return acc;
+    }, {});
+
+    return Object.values(grouped);
+  }, [rentals, usersList]);
 
   useEffect(() => {
     // keep rentalsByRenterState in sync (optional)
     setRentalsByRenterState(rentalsByRenter);
-  }, [usersList, rentals]);
+  }, [rentalsByRenter]);
 
   useEffect(() => {
     if (!ownerId) return;
@@ -487,10 +496,18 @@ const updateRentalStatus = async (rentalId, status) => {
 
       // Update earnings using increment(), then notify owner via message
       if (ownerRef) {
-        // Owner gets only: dailyRate × rentalDays (no service fee or delivery fee)
+        // Owner should receive the full renter charge (posted price/total)
         const dailyRate = Number(rentalData.dailyRate || 0);
         const rentalDays = Number(rentalData.rentalDays || 1);
-        const earningsToAdd = dailyRate * rentalDays;
+        const fallbackComputed = dailyRate * rentalDays;
+        const earningsToAddRaw = Number(
+          rentalData.totalAmount ||
+          rentalData.totalPrice ||
+          rentalData.price ||
+          fallbackComputed ||
+          0
+        );
+        const earningsToAdd = Number.isFinite(earningsToAddRaw) ? earningsToAddRaw : 0;
 
         if (earningsToAdd > 0) {
           console.log(`💰 [Completed] Adding ₱${earningsToAdd} to owner earnings (${dailyRate} × ${rentalDays} days)`);
@@ -1537,40 +1554,44 @@ const [showRentersList, setShowRentersList] = useState(false);
           <section className="admin-rentlist-section">
             <h2>Rent List</h2>
 
-            {rentalsByRenter.length === 0 ? (
+            {rentals.length === 0 ? (
               <p>No rentals yet.</p>
             ) : (
-              rentalsByRenter.map((group) => (
-                <div key={group.renter.uid || group.renter.email} className="admin-renter-group">
-                  <div className="admin-renter-total">
-                    <strong>Total Rentals:</strong> {group.items.length}
-                  </div>
+              <>
+                <div className="admin-renter-total overall-total">
+                  <strong>Total Rentals:</strong> {rentals.length}
+                </div>
 
-                  <div className="admin-renter-items">
-                    {group.items.map((it) => (
-                      <div key={it.id} className="admin-rental-card">
-                        <img src={it.propertyImage || it.imageUrl || it.imageFile || "/no-image.png"} alt={it.propertyName || "Property"} className="admin-rental-image" />
+                <div className="admin-renter-items">
+                  {rentals
+                    .slice()
+                    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                    .map((it) => {
+                      const renterProfile = usersList.find((u) => u.email === it.renterEmail);
+                      return (
+                        <div key={it.id} className="admin-rental-card">
+                          <img src={it.propertyImage || it.imageUrl || it.imageFile || "/no-image.png"} alt={it.propertyName || "Property"} className="admin-rental-image" />
 
-                        <div className="admin-rental-details">
-                          <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
-                          <div className="admin-rental-price">Price: ₱{it.dailyRate || it.price || 0}</div>
-                          <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
-                          {it.status === "Completed" && getDueDate(it) && (
-                            <div className={`admin-rental-duedate ${getDaysOverdue(it) > 0 ? "overdue" : ""}`}>
-                              Due: {getDueDate(it).toLocaleDateString()}
-                              {getDaysOverdue(it) > 0 && <span className="overdue-tag"> ⚠️ {getDaysOverdue(it)}d OVERDUE</span>}
+                          <div className="admin-rental-details">
+                            <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
+                            <div className="admin-rental-price">Price: ₱{it.dailyRate || it.price || 0}</div>
+                            <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
+                            {it.status === "Completed" && getDueDate(it) && (
+                              <div className={`admin-rental-duedate ${getDaysOverdue(it) > 0 ? "overdue" : ""}`}>
+                                Due: {getDueDate(it).toLocaleDateString()}
+                                {getDaysOverdue(it) > 0 && <span className="overdue-tag"> ⚠️ {getDaysOverdue(it)}d OVERDUE</span>}
+                              </div>
+                            )}
+                            <div className="admin-rental-status">
+                              Status:
+                              <button onClick={() => openRentalModal(it, renterProfile)} className="admin-rental-status-btn">{it.status || "N/A"}</button>
                             </div>
-                          )}
-                          <div className="admin-rental-status">
-                            Status:
-                            <button onClick={() => openRentalModal(it, group)} className="admin-rental-status-btn">{it.status || "N/A"}</button>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      );
+                    })}
                 </div>
-              ))
+              </>
             )}
           </section>
         )}

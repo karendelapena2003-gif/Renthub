@@ -50,6 +50,16 @@
   height: 100%;
   z-index: 1100;
   overflow-y: auto;
+.renter-photo.fallback-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #c7d2fe;
+  color: #1f2937;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 2px solid #e0e7ff;
+}
   transition: left 0.3s ease;
   padding-top: 20px;
 }
