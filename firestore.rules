@@ -38,9 +38,9 @@ service cloud.firestore {
     match /properties/{propertyId} {
       allow read: if isAdmin() || resource.data.status == "approved" || isEmail(resource.data.ownerEmail);
       allow create: if isSignedIn();
-      allow update: if isAdmin() || isEmail(resource.data.ownerEmail) || (
-        isSignedIn() && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentRenters', 'isRented'])
+        allow update: if isAdmin() || isEmail(resource.data.ownerEmail) || (
+          isSignedIn() && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentRenters', 'isRented', 'ratings', 'totalRating', 'ratingCount', 'averageRating'])
       );
       allow delete: if isAdmin() || isEmail(resource.data.ownerEmail);
     }

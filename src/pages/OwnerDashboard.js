@@ -60,6 +60,9 @@ const OwnerDashboard = ({ onLogout }) => {
   const [selectedRenterForMessage, setSelectedRenterForMessage] = useState(null);
   const [renterMessage, setRenterMessage] = useState("");
   const [viewingPropertyRenters, setViewingPropertyRenters] = useState(null); // For separate page view
+  const [showReviewsPanel, setShowReviewsPanel] = useState({});
+  const [editingPropertyId, setEditingPropertyId] = useState(null);
+  const [editPropertyForm, setEditPropertyForm] = useState({ maxRenters: 1 });
 
   // Comments states
   const [comments, setComments] = useState({});
@@ -67,6 +70,40 @@ const OwnerDashboard = ({ onLogout }) => {
   const [newComments, setNewComments] = useState({});
   const [commentReplyText, setCommentReplyText] = useState({});
   const [showReplyInput, setShowReplyInput] = useState({});
+
+  // Role verification on mount
+  useEffect(() => {
+    const verifyOwnerRole = async () => {
+      if (!auth.currentUser) {
+        navigate("/");
+        return;
+      }
+
+      try {
+        // Check users collection first
+        let userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        let role = userDoc.exists() ? userDoc.data().role : null;
+
+        // Fallback to owners collection
+        if (!role) {
+          const ownerDoc = await getDoc(doc(db, "owners", auth.currentUser.uid));
+          if (ownerDoc.exists()) {
+            role = "owner";
+          }
+        }
+
+        // If not an owner, redirect to renter dashboard
+        if (role !== "owner") {
+          navigate("/renter-dashboard");
+        }
+      } catch (err) {
+        console.error("Role verification failed:", err);
+        navigate("/");
+      }
+    };
+
+    verifyOwnerRole();
+  }, [navigate]);
 
   
   // ---------- Firestore listeners ----------
@@ -120,6 +157,59 @@ useEffect(() => {
   });
   return () => unsub();
 }, [ownerEmail]);
+
+// Aggregate ratings from rentals and persist to property docs so renters can see totals
+useEffect(() => {
+  if (!posts.length || !myRentalsView.length) return;
+  
+  const updatedPosts = posts.map(post => {
+    // Find all rentals with ratings for this property (any status once rated)
+    const propertyRentals = myRentalsView.filter(r => 
+      r.propertyId === post.id && 
+      r.rating != null && 
+      r.rating > 0
+    );
+    
+    if (propertyRentals.length === 0) return post;
+    
+    // Aggregate ratings
+    const ratings = propertyRentals.map(r => ({
+      rating: r.rating,
+      review: r.review || r.returnDescription || "",
+      renterEmail: r.renterEmail,
+      renterName: r.renterName || "Anonymous",
+      rentalId: r.id,
+      propertyName: r.propertyName,
+      createdAt: r.reviewedAt || r.returnedAt || new Date().toISOString(),
+    }));
+    
+    const totalRating = ratings.reduce((sum, r) => sum + r.rating, 0);
+    const ratingCount = ratings.length;
+    const averageRating = totalRating / ratingCount;
+    
+    // If aggregates changed, persist to Firestore so renters can read
+    const shouldPersist = (post.ratingCount !== ratingCount) || (Number(post.averageRating || 0).toFixed(2) !== averageRating.toFixed(2)) || (post.totalRating !== totalRating);
+    if (shouldPersist) {
+      const propertyRef = doc(db, "properties", post.id);
+      updateDoc(propertyRef, {
+        ratings,
+        totalRating,
+        ratingCount,
+        averageRating,
+      }).catch((e) => console.warn("Failed to persist rating aggregates", post.id, e));
+    }
+    
+    return {
+      ...post,
+      ratings,
+      totalRating,
+      ratingCount,
+      averageRating,
+    };
+  });
+  
+  setPosts(updatedPosts);
+}, [myRentalsView, posts]);
 
 // Fetch comments for owner's posts
 useEffect(() => {
@@ -185,6 +275,7 @@ useEffect(() => {
 
   // ---------- Profile handlers ----------
 
+
   // Send message to renter
   const handleSendMessageToRenter = async (renterEmail) => {
     if (!renterMessage.trim()) {
@@ -213,6 +304,35 @@ useEffect(() => {
       setToastMessage("❌ Failed to send message");
       setTimeout(() => setToastMessage(""), 2500);
     }
+  };
+
+  // Edit property (maxRenters)
+  const handleEditProperty = (property) => {
+    setEditingPropertyId(property.id);
+    setEditPropertyForm({ maxRenters: property.maxRenters || 1 });
+  };
+
+  const handleSavePropertyEdit = async () => {
+    if (editingPropertyId && editPropertyForm.maxRenters > 0) {
+      try {
+        await updateDoc(doc(db, "properties", editingPropertyId), {
+          maxRenters: editPropertyForm.maxRenters,
+          updatedAt: serverTimestamp(),
+        });
+        setToastMessage("✅ Property updated! Renters will see available slots now.");
+        setTimeout(() => setToastMessage(""), 3500);
+        setEditingPropertyId(null);
+      } catch (err) {
+        console.error(err);
+        setToastMessage("❌ Failed to update property");
+        setTimeout(() => setToastMessage(""), 2500);
+      }
+    }
+  };
+
+  const handleCancelPropertyEdit = () => {
+    setEditingPropertyId(null);
+    setEditPropertyForm({ maxRenters: 1 });
   };
 
   const handleSaveProfile = async () => {
@@ -2016,6 +2136,47 @@ useEffect(() => {
                 <h3>{post.name}</h3>
                 <p><strong>Price:</strong> ₱{post.price}</p>
                 <p><strong>Status:</strong> {post.status}</p>
+
+                {/* Ratings Summary (accumulated stars) */}
+                {(post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0)) ? (() => {
+                  const totalStars = (post.totalRating != null)
+                    ? post.totalRating
+                    : (Array.isArray(post.ratings)
+                        ? post.ratings.reduce((sum, r) => sum + (Number(r?.rating) || 0), 0)
+                        : 0);
+                  const reviewCount = (post.ratingCount != null && post.ratingCount > 0)
+                    ? post.ratingCount
+                    : (Array.isArray(post.ratings) ? post.ratings.length : 0);
+                  return (
+                    <p>
+                      <strong>Rating:</strong> ⭐ {totalStars} ({reviewCount} review{reviewCount > 1 ? "s" : ""})
+                    </p>
+                  );
+                })() : (
+                  <p><em>No ratings yet</em></p>
+                )}
+
+                {(post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0)) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewsPanel(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+                    style={{ marginTop: "6px" }}
+                  >
+                    {showReviewsPanel[post.id] ? "Hide Reviews" : "View All Reviews"}
+                  </button>
+                )}
+                {showReviewsPanel[post.id] && Array.isArray(post.ratings) && (
+                  <div className="reviews-panel" style={{ marginTop: "8px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px", padding: "8px" }}>
+                    {post.ratings.map((rv, idx) => (
+                      <div key={idx} className="review-item" style={{ marginBottom: "6px" }}>
+                        <div>⭐ {rv.rating} — {rv.review || "(no text)"}</div>
+                        <div style={{ fontSize: "0.85em", color: "#666" }}>
+                          {rv.renterName || rv.renterEmail || "Anonymous"} • {(() => { try { return rv.createdAt ? (typeof rv.createdAt === "string" ? new Date(rv.createdAt).toLocaleString() : (rv.createdAt?.toDate ? rv.createdAt.toDate().toLocaleString() : new Date(rv.createdAt).toLocaleString())) : "N/A"; } catch { return "N/A"; } })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 
                 {/* Admin Removal Indicator */}
                 {post.removedByAdmin && (
@@ -2046,6 +2207,30 @@ useEffect(() => {
                     onClick={() => setViewingPropertyRenters(post)}
                   >
                     ▶ View Renters ({propertyRentals.length})
+                  </button>
+                )}
+
+                {/* Edit Max Renters */}
+                {editingPropertyId === post.id ? (
+                  <div style={{ marginTop: "10px", padding: "8px", background: "#f0f0f0", borderRadius: "6px" }}>
+                    <label>Max Renters: </label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      value={editPropertyForm.maxRenters}
+                      onChange={(e) => setEditPropertyForm({ ...editPropertyForm, maxRenters: parseInt(e.target.value) || 1 })}
+                      style={{ marginRight: "8px" }}
+                    />
+                    <button onClick={handleSavePropertyEdit} style={{ marginRight: "6px" }}>Save</button>
+                    <button onClick={handleCancelPropertyEdit}>Cancel</button>
+                  </div>
+                ) : (
+                  <button 
+                    className="edit-btn" 
+                    onClick={() => handleEditProperty(post)}
+                    style={{ marginTop: "6px" }}
+                  >
+                    ✏️ Edit Max Renters ({post.maxRenters || 1})
                   </button>
                 )}
 
@@ -2231,8 +2416,14 @@ useEffect(() => {
                         alt="Return proof" 
                         className="return-proof-image"
                       />
+                      {rental.rating && rental.rating > 0 && (
+                        <p><strong>Rating:</strong> {"⭐".repeat(rental.rating)} ({rental.rating}/5)</p>
+                      )}
                       {rental.returnDescription && (
                         <p><strong>Feedback:</strong> {rental.returnDescription}</p>
+                      )}
+                      {rental.review && rental.review.trim() !== "" && (
+                        <p><strong>Review:</strong> {rental.review}</p>
                       )}
                     </div>
                   )}

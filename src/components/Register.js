@@ -9,8 +9,6 @@ const Register = () => {
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,7 +20,7 @@ const Register = () => {
     e.preventDefault();
     setError("");
 
-    if (!fullName.trim() || !phoneNumber.trim() || !address.trim()) {
+    if (!fullName.trim()) {
       setError("Please fill in all required fields");
       return;
     }
@@ -48,8 +46,6 @@ const Register = () => {
       const userData = {
         displayName: fullName,
         email: user.email,
-        phoneNumber,
-        address,
         role: role,
         photoURL: user.photoURL || "",
         createdAt: serverTimestamp(),
@@ -86,8 +82,6 @@ const Register = () => {
         await setDoc(docRef, {
           displayName: user.displayName || "",
           email: user.email,
-          phoneNumber: user.phoneNumber || "",
-          address: "",
           role: "renter",
           photoURL: user.photoURL || "",
           createdAt: serverTimestamp(),
@@ -97,8 +91,6 @@ const Register = () => {
           {
             displayName: user.displayName || "",
             email: user.email,
-            phoneNumber: user.phoneNumber || "",
-            address: "",
             role: "renter",
             photoURL: user.photoURL || "",
             createdAt: serverTimestamp(),
@@ -129,8 +121,6 @@ const Register = () => {
         await setDoc(docRef, {
           displayName: user.displayName || "",
           email: user.email,
-          phoneNumber: user.phoneNumber || "",
-          address: "",
           role: "renter",
           photoURL: user.photoURL || "",
           createdAt: serverTimestamp(),
@@ -140,8 +130,6 @@ const Register = () => {
           {
             displayName: user.displayName || "",
             email: user.email,
-            phoneNumber: user.phoneNumber || "",
-            address: "",
             role: "renter",
             photoURL: user.photoURL || "",
             createdAt: serverTimestamp(),
@@ -172,24 +160,6 @@ const Register = () => {
             className="register-input"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            required
-          />
-
-          <input
-            type="tel"
-            placeholder="Phone Number"
-            className="register-input"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="Address"
-            className="register-input"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
             required
           />
 

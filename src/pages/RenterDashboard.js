@@ -56,6 +56,7 @@ const [sidebarOpen, setSidebarOpen] = useState(false);
   // Data
   const [posts, setPosts] = useState([]);
   const [myRentals, setMyRentals] = useState([]);
+  const [allRentals, setAllRentals] = useState([]); // For rating aggregation
   const [notifications, setNotifications] = useState([]);
   const [messages, setMessages] = useState([]);
 
@@ -91,6 +92,13 @@ const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState("");
+
+  // Rating/Review
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingRental, setRatingRental] = useState(null);
+  const [rating, setRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [hoverRating, setHoverRating] = useState(0);
 
   // Chat
   const [selectedChat, setSelectedChat] = useState(null);
@@ -192,10 +200,13 @@ const filteredRentals = myRentals.filter((r) => {
 
     const unsubscribers = [];
 
-    // Properties
+    // Properties (listen to real-time updates when owner edits maxRenters, etc.)
     const propsUnsub = onSnapshot(
       query(collection(db, "properties"), where("status", "==", "approved")),
-      (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (snap) => {
+        const updated = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setPosts(updated);
+      },
       (err) => {
         console.error("Firestore: properties read denied", err);
         // Don't show toast for properties - might be empty on first login
@@ -216,7 +227,15 @@ const filteredRentals = myRentals.filter((r) => {
     );
     unsubscribers.push(rentalsUnsub);
 
-
+    // All rentals (for rating aggregation)
+    const allRentalsUnsub = onSnapshot(
+      collection(db, "rentals"),
+      (snap) => setAllRentals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => {
+        console.error("Firestore: all rentals read denied", err);
+      }
+    );
+    unsubscribers.push(allRentalsUnsub);
 
     // Messages: subscribe only to threads involving this renter (via participants)
     const qMsgs = query(
@@ -239,6 +258,56 @@ const filteredRentals = myRentals.filter((r) => {
 
     return () => unsubscribers.forEach((u) => u());
   }, [renterEmail]);
+
+// Aggregate ratings from all rentals into posts (runs when posts or rentals change, but avoids loops)
+useEffect(() => {
+  if (!posts.length || !allRentals.length) return;
+
+  console.log("=== RATING AGGREGATION ===", { posts: posts.length, rentals: allRentals.length });
+
+  const updatedPosts = posts.map(post => {
+    const propertyRentals = allRentals.filter(r =>
+      r.propertyId === post.id &&
+      r.rating != null &&
+      r.rating > 0
+    );
+
+    if (propertyRentals.length === 0) return post;
+
+    const ratings = propertyRentals.map(r => ({
+      rating: r.rating,
+      review: r.review || r.returnDescription || "",
+      renterEmail: r.renterEmail,
+      renterName: r.renterName || "Anonymous",
+      rentalId: r.id,
+      propertyName: r.propertyName,
+      createdAt: r.reviewedAt || r.returnedAt || new Date().toISOString(),
+    }));
+
+    const totalRating = ratings.reduce((sum, r) => sum + r.rating, 0);
+    const ratingCount = ratings.length;
+    const averageRating = totalRating / ratingCount;
+
+    return {
+      ...post,
+      ratings,
+      totalRating,
+      ratingCount,
+      averageRating,
+    };
+  });
+
+  // Only update state if aggregates changed to avoid loops
+  const changed = updatedPosts.some((p, idx) => {
+    const o = posts[idx];
+    return p.ratingCount !== o.ratingCount || p.totalRating !== o.totalRating || Number(p.averageRating || 0).toFixed(3) !== Number(o.averageRating || 0).toFixed(3) || (Array.isArray(p.ratings) && Array.isArray(o.ratings) ? p.ratings.length !== o.ratings.length : false);
+  });
+
+  if (changed) {
+    console.log("Updating posts state with aggregated ratings");
+    setPosts(updatedPosts);
+  }
+}, [posts, allRentals]);
 
 
 // Handle profile photo selection
@@ -409,6 +478,18 @@ const closeOwnerProfile = () => {
   }, [posts]);
 
   const getOwnerLabel = (email) => ownerNames[email] || (email ? email.split("@")[0] : "Unknown");
+
+  // Format review date helper
+  const formatReviewDate = (d) => {
+    try {
+      if (!d) return "N/A";
+      if (typeof d === "string") return new Date(d).toLocaleString();
+      if (d?.toDate) return d.toDate().toLocaleString();
+      return new Date(d).toLocaleString();
+    } catch {
+      return "N/A";
+    }
+  };
 
 
 
@@ -1113,6 +1194,7 @@ const [commentImages, setCommentImages] = useState({});
 const [showReplyInput, setShowReplyInput] = useState({});
 const [replyText, setReplyText] = useState({});
 const [showCommentInput, setShowCommentInput] = useState({});
+const [showReviewsPanel, setShowReviewsPanel] = useState({});
 const [showCommentsSection, setShowCommentsSection] = useState({});
 const [showProof, setShowProof] = useState({});
 const [showReturnProofModal, setShowReturnProofModal] = useState(false);
@@ -1190,22 +1272,80 @@ const handleSubmitReturnProof = async () => {
     return;
   }
 
+  // Rating is optional; if not provided, proceed with return proof only
+
   try {
     setLoading(true);
     
     // Upload proof to Cloudinary
     const proofUrl = await uploadToCloudinary(returnProofImage, "renthub/return-proofs");
     
-    // Update rental status in Firestore
-    await updateDoc(doc(db, "rentals", returnProofRental.id), {
+    // Update rental status (and rating if provided) in Firestore
+    await updateDoc(doc(db, "rentals", returnProofRental.id), Object.assign({
       status: "Returned",
       returnProofImage: proofUrl,
       returnDescription: returnDescription.trim(),
       returnedAt: serverTimestamp(),
-    });
+    },
+    rating > 0 ? {
+      rating: rating,
+      review: reviewText,
+      reviewedAt: serverTimestamp(),
+      reviewedBy: user?.email || auth.currentUser?.email,
+    } : {}));
 
-    setToastMessage("✅ Item marked as Returned");
-    setTimeout(() => setToastMessage(""), 2000);
+    // Add rating to property document
+    // If rating provided, update property aggregates
+    if (rating > 0 && returnProofRental.propertyId) {
+      try {
+        const propertyRef = doc(db, "properties", returnProofRental.propertyId);
+        const propertySnap = await getDoc(propertyRef);
+        if (propertySnap.exists()) {
+          const propertyData = propertySnap.data();
+          const currentRatings = propertyData.ratings || [];
+          const currentTotalRating = Number(propertyData.totalRating || 0);
+          const currentRatingCount = Number(propertyData.ratingCount || 0);
+          const newRatings = [...currentRatings, {
+            rating: rating,
+            review: reviewText,
+            renterEmail: user?.email || auth.currentUser?.email,
+            renterName: user?.displayName || auth.currentUser?.displayName || "Anonymous",
+            rentalId: returnProofRental.id,
+            propertyName: returnProofRental.propertyName,
+            createdAt: new Date().toISOString(),
+          }];
+          const newTotalRating = currentTotalRating + rating;
+          const newRatingCount = currentRatingCount + 1;
+          const averageRating = newRatingCount > 0 ? (newTotalRating / newRatingCount) : 0;
+          await updateDoc(propertyRef, {
+            ratings: newRatings,
+            totalRating: newTotalRating,
+            ratingCount: newRatingCount,
+            averageRating: averageRating,
+          });
+        }
+      } catch (e) {
+        console.warn("Rating aggregation update failed:", e);
+      }
+    }
+
+    // Send notification to owner about return and rating
+    if (returnProofRental.ownerEmail) {
+      const baseText = `✅ Item "${returnProofRental.propertyName}" has been returned`;
+      const ratingText = rating > 0 ? ` with ⭐${rating}-star rating${reviewText ? `: "${reviewText}"` : "!"}` : "!";
+      await addDoc(collection(db, "messages"), {
+        sender: user?.email || auth.currentUser?.email,
+        receiver: returnProofRental.ownerEmail,
+        participants: [(user?.email || auth.currentUser?.email).toLowerCase(), returnProofRental.ownerEmail.toLowerCase()],
+        senderRole: "renter",
+        receiverRole: "owner",
+        text: baseText + ratingText,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    setToastMessage(rating > 0 ? "✅ Item returned and rated successfully!" : "✅ Return proof submitted successfully!");
+    setTimeout(() => setToastMessage(""), 2500);
     
     // Close modal and reset
     setShowReturnProofModal(false);
@@ -1213,6 +1353,9 @@ const handleSubmitReturnProof = async () => {
     setReturnProofImage(null);
     setReturnProofPreview("");
     setReturnDescription("");
+    setRating(0);
+    setReviewText("");
+    setHoverRating(0);
   } catch (err) {
     console.error(err);
     setToastMessage("❌ Failed to submit return proof");
@@ -1228,6 +1371,9 @@ const handleCancelReturnProof = () => {
   setReturnProofImage(null);
   setReturnProofPreview("");
   setReturnDescription("");
+  setRating(0);
+  setReviewText("");
+  setHoverRating(0);
 };
 
 // Check for overdue rentals
@@ -1270,6 +1416,93 @@ useEffect(() => {
     }
   }
 }, [myRentals, checkOverdueRentals, activePage]);
+
+// Submit rating and review
+const handleSubmitRating = async () => {
+  if (!ratingRental) return;
+  if (rating === 0) {
+    setToastMessage("⚠️ Please select a rating");
+    setTimeout(() => setToastMessage(""), 2500);
+    return;
+  }
+
+  try {
+    // Update rental with rating
+    await updateDoc(doc(db, "rentals", ratingRental.id), {
+      rating: rating,
+      review: reviewText,
+      reviewedAt: serverTimestamp(),
+      reviewedBy: user?.email || auth.currentUser?.email,
+    });
+
+    // Add rating to property document
+    const propertyRef = doc(db, "properties", ratingRental.propertyId);
+    const propertySnap = await getDoc(propertyRef);
+    
+    if (propertySnap.exists()) {
+      const propertyData = propertySnap.data();
+      const currentRatings = propertyData.ratings || [];
+      const currentTotalRating = propertyData.totalRating || 0;
+      const currentRatingCount = propertyData.ratingCount || 0;
+      
+      // Add new rating
+      const newRatings = [...currentRatings, {
+        rating: rating,
+        review: reviewText,
+        renterEmail: user?.email || auth.currentUser?.email,
+        renterName: user?.displayName || auth.currentUser?.displayName || "Anonymous",
+        rentalId: ratingRental.id,
+        propertyName: ratingRental.propertyName,
+        createdAt: new Date().toISOString(),
+      }];
+      
+      const newTotalRating = currentTotalRating + rating;
+      const newRatingCount = currentRatingCount + 1;
+      const averageRating = newTotalRating / newRatingCount;
+      
+      await updateDoc(propertyRef, {
+        ratings: newRatings,
+        totalRating: newTotalRating,
+        ratingCount: newRatingCount,
+        averageRating: averageRating,
+      });
+    }
+
+    // Send notification to owner
+    if (ratingRental.ownerEmail) {
+      await addDoc(collection(db, "messages"), {
+        sender: user?.email || auth.currentUser?.email,
+        receiver: ratingRental.ownerEmail,
+        participants: [(user?.email || auth.currentUser?.email).toLowerCase(), ratingRental.ownerEmail.toLowerCase()],
+        senderRole: "renter",
+        receiverRole: "owner",
+        text: `⭐ New ${rating}-star rating on your property "${ratingRental.propertyName}"${reviewText ? `: "${reviewText}"` : "!"}`,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    setToastMessage("✅ Rating submitted successfully!");
+    setTimeout(() => setToastMessage(""), 2500);
+    
+    // Close modal and reset
+    setShowRatingModal(false);
+    setRatingRental(null);
+    setRating(0);
+    setReviewText("");
+  } catch (err) {
+    console.error("Failed to submit rating:", err);
+    setToastMessage("❌ Failed to submit rating");
+    setTimeout(() => setToastMessage(""), 2500);
+  }
+};
+
+// Open rating modal
+const openRatingModal = (rental) => {
+  setRatingRental(rental);
+  setRating(rental.rating || 0);
+  setReviewText(rental.review || "");
+  setShowRatingModal(true);
+};
 
 // Calculate days overdue
 const getDaysOverdue = (rental) => {
@@ -1836,7 +2069,20 @@ useEffect(() => {
 {/* BROWSE RENTALS */}
 {activePage === "browseRentals" && userRole === "renter" && (
   <div className="browse-rentals-renter">
-    <h1>Browse Rentals</h1>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+      <h1>Browse Rentals</h1>
+      <button 
+        onClick={() => {
+          // Force refresh posts from Firestore
+          setSearchTerm("");
+          setToastMessage("🔄 Refreshing available rentals...");
+          setTimeout(() => setToastMessage(""), 2000);
+        }}
+        style={{ padding: "8px 16px", cursor: "pointer" }}
+      >
+        🔄 Refresh
+      </button>
+    </div>
 
     {/* Search Bar */}
     <div className="search-bar">
@@ -1870,8 +2116,11 @@ useEffect(() => {
           .filter((post) => {
             const renters = post.currentRenters || [];
             const max = post.maxRenters || 1;
-            const userRented = renters.includes(auth.currentUser?.uid);
-            if (renters.length >= max || userRented) return false;
+            const isRated = (post.ratingCount || 0) > 0;
+            // If item has ratings, always show. If not rated, show only if explicitly approved by admin.
+            // Default older items (no adminApproved field) to approved for backward compatibility.
+            const isApproved = isRated || post.adminApproved || (post.adminApproved === undefined && post.ratingCount === undefined);
+            if (!isApproved || renters.length >= max) return false;
             return true;
           })
           .filter(post => post.name.toLowerCase().includes(ownerSearchTerm.toLowerCase()))
@@ -1881,8 +2130,9 @@ useEffect(() => {
               .filter((post) => {
                 const renters = post.currentRenters || [];
                 const max = post.maxRenters || 1;
-                const userRented = renters.includes(auth.currentUser?.uid);
-                if (renters.length >= max || userRented) return false;
+                const isRated = (post.ratingCount || 0) > 0;
+                const isApproved = isRated || post.adminApproved || (post.adminApproved === undefined && post.ratingCount === undefined);
+                if (!isApproved || renters.length >= max) return false;
                 return true;
               })
               .filter(post => post.name.toLowerCase().includes(ownerSearchTerm.toLowerCase()))
@@ -1897,6 +2147,47 @@ useEffect(() => {
                   <p>Owner: {getOwnerLabel(post.ownerEmail)}</p>
                   <p><strong>Price:</strong> ₱{post.price}</p>
                   <p>{post.description}</p>
+
+                  {/* Ratings Summary (accumulated stars) */}
+                  {(post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0)) ? (() => {
+                    const totalStars = (post.totalRating != null)
+                      ? post.totalRating
+                      : (Array.isArray(post.ratings)
+                          ? post.ratings.reduce((sum, r) => sum + (Number(r?.rating) || 0), 0)
+                          : 0);
+                    const reviewCount = (post.ratingCount != null && post.ratingCount > 0)
+                      ? post.ratingCount
+                      : (Array.isArray(post.ratings) ? post.ratings.length : 0);
+                    return (
+                      <p>
+                        <strong>Rating:</strong> ⭐ {totalStars} ({reviewCount} review{reviewCount > 1 ? "s" : ""})
+                      </p>
+                    );
+                  })() : (
+                    <p><em>No ratings yet</em></p>
+                  )}
+
+                  {post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0) ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowReviewsPanel(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+                      style={{ marginTop: "6px" }}
+                    >
+                      {showReviewsPanel[post.id] ? "Hide Reviews" : "View All Reviews"}
+                    </button>
+                  ) : null}
+                  {showReviewsPanel[post.id] && Array.isArray(post.ratings) && (
+                    <div className="reviews-panel" style={{ marginTop: "8px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px", padding: "8px" }}>
+                      {post.ratings.map((rv, idx) => (
+                        <div key={idx} className="review-item" style={{ marginBottom: "6px" }}>
+                          <div>⭐ {rv.rating} — {rv.review || "(no text)"}</div>
+                          <div style={{ fontSize: "0.85em", color: "#666" }}>
+                            {rv.renterName || rv.renterEmail || "Anonymous"} • {formatReviewDate(rv.createdAt)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Message Owner */}
                   <div className="message-owner">
@@ -2248,16 +2539,18 @@ useEffect(() => {
         {filteredPosts.filter(post => {
           const renters = post.currentRenters || [];
           const max = post.maxRenters || 1;
-          const userRented = renters.includes(auth.currentUser?.uid);
-          if (renters.length >= max || userRented) return false;
+          const isRated = (post.ratingCount || 0) > 0;
+          const isApproved = isRated || post.adminApproved || (post.adminApproved === undefined && post.ratingCount === undefined);
+          if (!isApproved || renters.length >= max) return false;
           return true;
         }).length > 0 ? (
           filteredPosts
             .filter(post => {
               const renters = post.currentRenters || [];
               const max = post.maxRenters || 1;
-              const userRented = renters.includes(auth.currentUser?.uid);
-              if (renters.length >= max || userRented) return false;
+              const isRated = (post.ratingCount || 0) > 0;
+              const isApproved = isRated || post.adminApproved || (post.adminApproved === undefined && post.ratingCount === undefined);
+              if (!isApproved || renters.length >= max) return false;
               return true;
             })
             .map((post) => (
@@ -2401,14 +2694,59 @@ useEffect(() => {
   )}
 </div>
 
+                {/* Ratings Summary (accumulated stars) */}
+                {(post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0)) ? (() => {
+                  const totalStars = (post.totalRating != null)
+                    ? post.totalRating
+                    : (Array.isArray(post.ratings)
+                        ? post.ratings.reduce((sum, r) => sum + (Number(r?.rating) || 0), 0)
+                        : 0);
+                  const reviewCount = (post.ratingCount != null && post.ratingCount > 0)
+                    ? post.ratingCount
+                    : (Array.isArray(post.ratings) ? post.ratings.length : 0);
+                  return (
+                    <p>
+                      <strong>Rating:</strong> ⭐ {totalStars} ({reviewCount} review{reviewCount > 1 ? "s" : ""})
+                    </p>
+                  );
+                })() : (
+                  <p><em>No ratings yet</em></p>
+                )}
+
+                {post.ratingCount > 0 || (Array.isArray(post.ratings) && post.ratings.length > 0) ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewsPanel(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+                    style={{ marginTop: "6px" }}
+                  >
+                    {showReviewsPanel[post.id] ? "Hide Reviews" : "View All Reviews"}
+                  </button>
+                ) : null}
+                {showReviewsPanel[post.id] && Array.isArray(post.ratings) && (
+                  <div className="reviews-panel" style={{ marginTop: "8px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px", padding: "8px" }}>
+                    {post.ratings.map((rv, idx) => (
+                      <div key={idx} className="review-item" style={{ marginBottom: "6px" }}>
+                        <div>⭐ {rv.rating} — {rv.review || "(no text)"}</div>
+                        <div style={{ fontSize: "0.85em", color: "#666" }}>
+                          {rv.renterName || rv.renterEmail || "Anonymous"} • {formatReviewDate(rv.createdAt)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
 
                 <div className="rental-actions">
-                  <button 
-                    onClick={() => handleRentNow(post)}
-                    disabled={post.currentRenters?.includes(auth.currentUser?.uid)}
-                  >
-                    {post.currentRenters?.includes(auth.currentUser?.uid) ? "Already Rented" : "Rent Now"}
-                  </button>
+                  {(() => {
+                    const renters = post.currentRenters || [];
+                    const max = post.maxRenters || 1;
+                    const isStockFull = renters.length >= max;
+                    
+                    if (isStockFull) {
+                      return <button disabled style={{ opacity: 0.5 }}>Out of Stock</button>;
+                    }
+                    return <button onClick={() => handleRentNow(post)}>Rent Now</button>;
+                  })()}
                 </div>
               </div>
             ))
@@ -2426,6 +2764,38 @@ useEffect(() => {
  <div className="my-rentals-renter">
     <div className="rentals-container">
       <h1 className="rentals-title">My Rentals</h1>
+
+      {/* Overdue Fee Summary Banner */}
+      {(() => {
+        const rentalsWithFees = myRentals.filter(r => r.overdueFee && r.overdueFee > 0);
+        const totalOverdueFees = rentalsWithFees.reduce((sum, r) => sum + (r.overdueFee || 0), 0);
+        
+        if (rentalsWithFees.length > 0) {
+          return (
+            <div className="overdue-fee-banner" style={{
+              background: "linear-gradient(135deg, #ff6b6b, #ee5a6f)",
+              color: "white",
+              padding: "15px 20px",
+              borderRadius: "10px",
+              marginBottom: "20px",
+              boxShadow: "0 4px 15px rgba(255, 107, 107, 0.3)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 8px 0", fontSize: "18px" }}>⚠️ Outstanding Overdue Fees</h3>
+                  <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>
+                    You have {rentalsWithFees.length} rental(s) with overdue fees totaling <strong>₱{totalOverdueFees.toLocaleString()}</strong>
+                  </p>
+                </div>
+                <div style={{ fontSize: "32px", fontWeight: "bold" }}>
+                  ₱{totalOverdueFees.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Tabs */}
       <div className="rentals-tabs">
@@ -2546,12 +2916,25 @@ useEffect(() => {
                 <p><strong>Rental Duration (Days):</strong> {rental.rentalDays || "N/A"}</p>
                 <p><strong>Service Fee:</strong> ₱{rental.serviceFee?.toLocaleString() || "0"}</p>
                 <p><strong>Delivery Fee:</strong> ₱{rental.deliveryFee?.toLocaleString() || "0"}</p>
+                {rental.overdueFee && rental.overdueFee > 0 && (
+                  <p className="overdue-fee-warning"><strong>⚠️ Overdue Fee:</strong> ₱{rental.overdueFee?.toLocaleString() || "0"} ({rental.overdueDays || 0} days)</p>
+                )}
                 <p><strong>Total Amount:</strong> ₱{rental.totalAmount?.toLocaleString() || "0"}</p>
+                {rental.overdueFee && rental.overdueFee > 0 && (
+                  <p className="total-with-overdue"><strong>Total with Overdue Fee:</strong> ₱{((rental.totalAmount || 0) + (rental.overdueFee || 0)).toLocaleString()}</p>
+                )}
                 <p><strong>Date Rented:</strong> {formatDate(rentalDate)}</p>
                 {rental.status === "Completed" && getDueDate(rental) && (
                   <p className={getDaysOverdue(rental) > 0 ? "overdue-warning" : ""}>
                     <strong>Due Date:</strong> {getDueDate(rental).toLocaleDateString()}
-                    {getDaysOverdue(rental) > 0 && <span className="overdue-badge"> ⚠️ {getDaysOverdue(rental)} days overdue!</span>}
+                    {getDaysOverdue(rental) > 0 && (
+                      <>
+                        <span className="overdue-badge"> ⚠️ {getDaysOverdue(rental)} days overdue!</span>
+                        {rental.overdueFee && rental.overdueFee > 0 && (
+                          <span className="overdue-fee-applied"> (Fee: ₱{rental.overdueFee.toLocaleString()})</span>
+                        )}
+                      </>
+                    )}
                   </p>
                 )}
                 {rental.returnProofImage && rental.status === "Returned" && (
@@ -2566,12 +2949,142 @@ useEffect(() => {
                     </button>
                   </div>
                 )}
+                {rental.rating && rental.status === "Returned" && (
+                  <div className="rating-display" style={{ 
+                    marginTop: "15px", 
+                    padding: "10px", 
+                    background: "#f8f9fa", 
+                    borderRadius: "8px",
+                    borderLeft: "4px solid #ffc107"
+                  }}>
+                    <p style={{ margin: "0 0 8px 0" }}><strong>⭐ Your Rating:</strong></p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span key={star} style={{ fontSize: "20px", color: star <= rental.rating ? "#ffc107" : "#ddd" }}>
+                          ★
+                        </span>
+                      ))}
+                      <span style={{ fontWeight: "bold", fontSize: "16px" }}>{rental.rating}/5</span>
+                    </div>
+                    {rental.review && (
+                      <p style={{ margin: "8px 0 0 0", fontSize: "14px", color: "#555", fontStyle: "italic" }}>
+                        "{rental.review}"
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
     </div>
+
+    {/* RATING MODAL */}
+    {showRatingModal && ratingRental && (
+      <div className="rental-modal-overlay">
+        <div className="rental-modal" style={{ maxWidth: "500px" }}>
+          <button className="close-btn" onClick={() => {
+            setShowRatingModal(false);
+            setRatingRental(null);
+            setRating(0);
+            setReviewText("");
+            setHoverRating(0);
+          }}>✖</button>
+          
+          <h2>Rate Your Rental Experience</h2>
+          <p style={{ color: "#666", marginBottom: "20px" }}>
+            How was your experience with <strong>{ratingRental.propertyName}</strong>?
+          </p>
+          
+          {/* Star Rating */}
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <div style={{ fontSize: "48px", display: "flex", justifyContent: "center", gap: "8px" }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  onClick={() => setRating(star)}
+                  style={{
+                    cursor: "pointer",
+                    color: star <= (hoverRating || rating) ? "#ffc107" : "#ddd",
+                    transition: "color 0.2s"
+                  }}
+                >
+                  ★
+                </span>
+              ))}
+            </div>
+            <p style={{ marginTop: "10px", fontSize: "18px", fontWeight: "bold", color: "#333" }}>
+              {rating === 0 ? "Select your rating" : `${rating} out of 5 stars`}
+            </p>
+          </div>
+
+          {/* Review Text */}
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+              Write a Review (Optional)
+            </label>
+            <textarea
+              className="return-description-textarea"
+              placeholder="Share your experience with this rental..."
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              rows={4}
+              style={{
+                width: "100%",
+                padding: "10px",
+                borderRadius: "5px",
+                border: "1px solid #ccc",
+                fontSize: "14px",
+                resize: "vertical"
+              }}
+            />
+          </div>
+
+          {/* Submit Button */}
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button
+              onClick={() => {
+                setShowRatingModal(false);
+                setRatingRental(null);
+                setRating(0);
+                setReviewText("");
+                setHoverRating(0);
+              }}
+              style={{
+                padding: "10px 20px",
+                background: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                fontSize: "14px"
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmitRating}
+              disabled={rating === 0}
+              style={{
+                padding: "10px 20px",
+                background: rating === 0 ? "#ccc" : "#4CAF50",
+                color: "white",
+                border: "none",
+                borderRadius: "5px",
+                cursor: rating === 0 ? "not-allowed" : "pointer",
+                fontSize: "14px",
+                fontWeight: "bold"
+              }}
+            >
+              Submit Rating
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* RETURN PROOF MODAL */}
     {showReturnProofModal && returnProofRental && (
@@ -2597,6 +3110,45 @@ useEffect(() => {
               onChange={(e) => setReturnDescription(e.target.value)}
               rows={4}
             />
+
+            {/* Rating Section */}
+            <div style={{ margin: "20px 0", padding: "15px", background: "#f8f9fa", borderRadius: "8px" }}>
+              <label style={{ display: "block", marginBottom: "10px", fontWeight: "bold" }}>Rate Your Experience *</label>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "36px", display: "flex", justifyContent: "center", gap: "8px", marginBottom: "8px" }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onClick={() => setRating(star)}
+                      style={{
+                        cursor: "pointer",
+                        color: star <= (hoverRating || rating) ? "#ffc107" : "#ddd",
+                        transition: "color 0.2s"
+                      }}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+                <p style={{ margin: "0", fontSize: "14px", fontWeight: "bold", color: rating === 0 ? "#dc3545" : "#28a745" }}>
+                  {rating === 0 ? "Please select your rating" : `${rating} out of 5 stars`}
+                </p>
+              </div>
+              
+              <div style={{ marginTop: "15px" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>Additional Review (Optional)</label>
+                <textarea
+                  className="return-description-textarea"
+                  placeholder="Tell others about your experience with this rental..."
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  rows={3}
+                  style={{ fontSize: "13px" }}
+                />
+              </div>
+            </div>
 
             <label>Upload Return Proof (Image) *</label>
             <input

@@ -34,9 +34,10 @@ const Login = () => {
         return;
       }
 
-      // Check role in Firestore
-      const docRef = doc(db, "users", user.uid);
-      const docSnap = await getDoc(docRef);
+      // Check role in Firestore (primary: users collection, fallback: owners/renters)
+      let role = null;
+      let docRef = doc(db, "users", user.uid);
+      let docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -45,11 +46,26 @@ const Login = () => {
           setError("This account is blocked or deleted.");
           return;
         }
-        const role = data.role;
-        if (role === "owner") navigate("/owner-dashboard");
-        else if (role === "renter") navigate("/renter-dashboard");
-        else navigate("/unauthorized");
+        role = data.role;
       } else {
+        // Fallback: check owners collection
+        docRef = doc(db, "owners", user.uid);
+        docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          role = "owner";
+        } else {
+          // Fallback: check renters collection
+          docRef = doc(db, "renters", user.uid);
+          docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            role = "renter";
+          }
+        }
+      }
+
+      if (role === "owner") navigate("/owner-dashboard");
+      else if (role === "renter") navigate("/renter-dashboard");
+      else {
         setError("No role found for this account.");
       }
     } catch (err) {

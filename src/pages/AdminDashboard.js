@@ -47,7 +47,9 @@ const AdminDashboard = ({ onLogout }) => {
   const [deletedUsers, setDeletedUsers] = useState([]);
   const [deletedRentals, setDeletedRentals] = useState([]);
   const [deletedWithdrawals, setDeletedWithdrawals] = useState([]);
+  const [deletedMessages, setDeletedMessages] = useState([]);
   const [deletedTab, setDeletedTab] = useState("properties");
+  const [showReviewsFor, setShowReviewsFor] = useState({});
 
   /* ---------------- messages ---------------- */
   const [messages, setMessages] = useState([]);
@@ -69,6 +71,8 @@ const AdminDashboard = ({ onLogout }) => {
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [rentalModal, setRentalModal] = useState(null);
   const [rentalStatusEdit, setRentalStatusEdit] = useState("");
+  const [roleEditUserId, setRoleEditUserId] = useState(null);
+  const [roleEditValue, setRoleEditValue] = useState("");
 
   /* ---------------- misc states that were missing ---------------- */
   const [gcashAccountName, setGcashAccountName] = useState("");
@@ -77,6 +81,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [rentalsByRenterState, setRentalsByRenterState] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const ownerId = auth.currentUser ? auth.currentUser.uid : null;
+  const [overdueFeeAmount, setOverdueFeeAmount] = useState(50); // Default ₱50 per day
 
   /* ---------------- toast notifications ---------------- */
   const [toastMessage, setToastMessage] = useState("");
@@ -295,6 +300,55 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  // Apply overdue fee to rental
+  const applyOverdueFee = async (rental) => {
+    try {
+      const daysOverdue = getDaysOverdue(rental);
+      if (daysOverdue <= 0) {
+        setToastMessage("⚠️ This rental is not overdue");
+        setTimeout(() => setToastMessage(""), 2500);
+        return;
+      }
+
+      const totalOverdueFee = daysOverdue * overdueFeeAmount;
+      const currentOverdueFee = rental.overdueFee || 0;
+
+      if (!window.confirm(`Apply overdue fee of ₱${totalOverdueFee.toFixed(2)} (${daysOverdue} days × ₱${overdueFeeAmount})?`)) return;
+
+      // Update rental with overdue fee
+      await updateDoc(doc(db, "rentals", rental.id), {
+        overdueFee: totalOverdueFee,
+        overdueDays: daysOverdue,
+        overdueFeeAppliedAt: serverTimestamp(),
+        overdueFeeAppliedBy: adminEmail || "admin@renthub.com",
+      });
+
+      // Send notification to renter
+      await addDoc(collection(db, "messages"), {
+        sender: adminEmail || "admin@renthub.com",
+        receiver: rental.renterEmail,
+        participants: [(adminEmail || "admin@renthub.com").toLowerCase(), rental.renterEmail.toLowerCase()],
+        senderRole: "admin",
+        receiverRole: "renter",
+        text: `⚠️ OVERDUE FEE APPLIED: Your rental "${rental.propertyName}" has an overdue fee of ₱${totalOverdueFee.toFixed(2)} for ${daysOverdue} day(s) overdue. Please settle this amount along with your rental return.`,
+        createdAt: serverTimestamp(),
+        isSystemMessage: true,
+      });
+
+      setToastMessage(`✅ Overdue fee of ₱${totalOverdueFee.toFixed(2)} applied`);
+      setTimeout(() => setToastMessage(""), 2500);
+      
+      // Update modal if open
+      if (rentalModal?.id === rental.id) {
+        setRentalModal({ ...rentalModal, overdueFee: totalOverdueFee, overdueDays: daysOverdue });
+      }
+    } catch (err) {
+      console.error("Failed to apply overdue fee:", err);
+      setToastMessage("❌ Failed to apply overdue fee");
+      setTimeout(() => setToastMessage(""), 2500);
+    }
+  };
+
   const handlePhotoSelect = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -403,6 +457,76 @@ const AdminDashboard = ({ onLogout }) => {
       console.error(err);
       setToastMessage("❌ Failed to update property");
       setTimeout(() => setToastMessage(""), 3000);
+    }
+  };
+
+  // Approve unrated property for rental
+  const approvePropertyForRental = async (propertyId) => {
+    if (!window.confirm("Approve this item for rental?")) return;
+    try {
+      await updateDoc(doc(db, "properties", propertyId), { 
+        adminApproved: true, 
+        adminApprovedAt: serverTimestamp(),
+        adminApprovedBy: adminUser?.email || "admin"
+      });
+      setToastMessage("✅ Property approved for rental");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to approve property");
+      setTimeout(() => setToastMessage(""), 3000);
+    }
+  };
+
+  // Fix user role across all collections
+  const handleUpdateUserRole = async (userId, newRole) => {
+    if (!window.confirm(`Change user role to ${newRole}?`)) return;
+    
+    try {
+      // Update in users collection (create if doesn't exist)
+      await setDoc(doc(db, "users", userId), {
+        role: newRole,
+        updatedAt: serverTimestamp(),
+        updatedBy: adminUser?.email || "admin"
+      }, { merge: true });
+
+      // Update in role-specific collections
+      if (newRole === "owner") {
+        // Create/update in owners collection
+        await setDoc(doc(db, "owners", userId), {
+          role: "owner",
+          updatedAt: serverTimestamp(),
+          updatedBy: adminUser?.email || "admin"
+        }, { merge: true });
+        // Remove from renters if exists
+        try {
+          await deleteDoc(doc(db, "renters", userId));
+        } catch (e) {
+          // Might not exist, that's okay
+        }
+      } else if (newRole === "renter") {
+        // Create/update in renters collection
+        await setDoc(doc(db, "renters", userId), {
+          role: "renter",
+          updatedAt: serverTimestamp(),
+          updatedBy: adminUser?.email || "admin"
+        }, { merge: true });
+        // Remove from owners if exists
+        try {
+          await deleteDoc(doc(db, "owners", userId));
+        } catch (e) {
+          // Might not exist, that's okay
+        }
+      }
+
+      setToastMessage(`✅ User role updated to ${newRole}`);
+      setTimeout(() => setToastMessage(""), 2500);
+      setRoleEditUserId(null);
+      setRoleEditValue("");
+    } catch (err) {
+      console.error("Role update error:", err);
+      setToastMessage(`❌ Failed to update user role: ${err.message}`);
+      setTimeout(() => setToastMessage(""), 3500);
     }
   };
 
@@ -719,10 +843,16 @@ useEffect(() => {
         (m.receiver === adminEmail && (m.senderRole === "owner" || m.senderRole === "renter"))
     );
 
-    // Sort newest first
-    filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    // Separate deleted and active messages
+    const activeMessages = filtered.filter(m => !m.deleted);
+    const deletedMsgs = filtered.filter(m => m.deleted);
 
-    setAdminMessages(filtered);
+    // Sort newest first
+    activeMessages.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    deletedMsgs.sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0));
+
+    setAdminMessages(activeMessages);
+    setDeletedMessages(deletedMsgs);
   });
 
   return () => unsub();
@@ -873,7 +1003,12 @@ const handleDeleteMessage = async (messageId) => {
   if (!window.confirm("Delete this message?")) return;
   
   try {
-    await deleteDoc(doc(db, "messages", messageId));
+    const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
+    await updateDoc(doc(db, "messages", messageId), {
+      deleted: true,
+      deletedAt: serverTimestamp(),
+      deletedBy: currentAdminEmail,
+    });
     setToastMessage("✅ Message deleted");
     setTimeout(() => setToastMessage(""), 2000);
   } catch (err) {
@@ -884,11 +1019,18 @@ const handleDeleteMessage = async (messageId) => {
 };
 
 const handleDeleteAllMessages = async () => {
-  if (!window.confirm("⚠️ Delete ALL conversations? This cannot be undone!")) return;
+  if (!window.confirm("⚠️ Delete ALL conversations?")) return;
 
   try {
+    const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
     const allMessages = messages.filter(m => m.senderRole === "admin" || m.receiverRole === "admin");
-    await Promise.all(allMessages.map(m => deleteDoc(doc(db, "messages", m.id))));
+    await Promise.all(allMessages.map(m => 
+      updateDoc(doc(db, "messages", m.id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: currentAdminEmail,
+      })
+    ));
     setSelectedChat(null);
     setToastMessage("✅ All conversations deleted");
     setTimeout(() => setToastMessage(""), 2500);
@@ -993,25 +1135,30 @@ const rejectWithdrawal = async (withdrawal) => {
   if (!window.confirm("Are you sure you want to reject this withdrawal?")) return;
 
   try {
+    const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
+    
     // Update withdrawal status to rejected
     await updateDoc(doc(db, "withdrawals", id), {
       status: "rejected",
       rejectedAt: serverTimestamp(),
-      rejectedBy: adminEmail,
+      rejectedBy: currentAdminEmail,
     });
 
     // Send notification to owner
-    await addDoc(collection(db, "messages"), {
-      sender: adminEmail,
-      receiver: ownerEmail,
-      participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
-      senderRole: "admin",
-      receiverRole: "owner",
-      text: `❌ Your withdrawal request of ₱${Number(amount || 0).toFixed(2)} has been rejected by admin.`,
-      createdAt: serverTimestamp(),
-    });
+    if (ownerEmail) {
+      await addDoc(collection(db, "messages"), {
+        sender: currentAdminEmail,
+        receiver: ownerEmail,
+        participants: [currentAdminEmail.toLowerCase(), ownerEmail.toLowerCase()],
+        senderRole: "admin",
+        receiverRole: "owner",
+        text: `❌ Your withdrawal request of ₱${Number(amount || 0).toFixed(2)} has been rejected by admin.`,
+        createdAt: serverTimestamp(),
+      });
+      console.log("✅ Rejection message sent to:", ownerEmail);
+    }
 
-    setToastMessage("✅ Withdrawal rejected");
+    setToastMessage("✅ Withdrawal rejected and owner notified");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("❌ [Reject] Error:", err);
@@ -1023,48 +1170,132 @@ const rejectWithdrawal = async (withdrawal) => {
 // Delete a single withdrawal (no toast, removes inline)
 const handleDeleteWithdrawal = async (withdrawal) => {
   try {
+    const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
+    
     await updateDoc(doc(db, "withdrawals", withdrawal.id), {
       deleted: true,
       deletedAt: serverTimestamp(),
-      deletedBy: adminUser?.email || "admin",
+      deletedBy: currentAdminEmail,
     });
+    
+    // Send notification to owner about withdrawal deletion
+    if (withdrawal.ownerEmail) {
+      await addDoc(collection(db, "messages"), {
+        sender: currentAdminEmail,
+        receiver: withdrawal.ownerEmail,
+        participants: [currentAdminEmail.toLowerCase(), withdrawal.ownerEmail.toLowerCase()],
+        senderRole: "admin",
+        receiverRole: "owner",
+        text: `🗑️ Your withdrawal request of ₱${Number(withdrawal.amount || 0).toFixed(2)} has been deleted by admin.`,
+        createdAt: serverTimestamp(),
+      });
+      console.log("✅ Deletion notification sent to:", withdrawal.ownerEmail);
+    }
+    
     setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
+    setToastMessage("✅ Withdrawal deleted and owner notified");
+    setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("Failed to delete withdrawal", err);
+    setToastMessage("❌ Failed to delete withdrawal");
+    setTimeout(() => setToastMessage(""), 3000);
   }
 };
 
 // Restore deleted property
 const handleRestoreDeletedItem = async (item) => {
-  if (!window.confirm(`Restore "${item.name || 'this property'}"?`)) return;
+  const itemName = item.name || item.displayName || item.email || item.propertyName || 'this item';
+  if (!window.confirm(`Restore "${itemName}"?`)) return;
   try {
-    await updateDoc(doc(db, "properties", item.id), {
-      removedByAdmin: false,
-      removedAt: null,
-      removedByAdminId: null,
-      removedByAdminEmail: null
-    });
-    setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
-    setToastMessage("✅ Property restored successfully");
+    if (deletedTab === "properties") {
+      await updateDoc(doc(db, "properties", item.id), {
+        removedByAdmin: false,
+        removedAt: null,
+        removedByAdminId: null,
+        removedByAdminEmail: null
+      });
+      setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Property restored successfully");
+    } else if (deletedTab === "users") {
+      const updates = {
+        deleted: false,
+        blocked: false,
+        deletedAt: null,
+        deletedBy: null
+      };
+      await Promise.all([
+        setDoc(doc(db, "users", item.uid), updates, { merge: true }),
+        setDoc(doc(db, item.role === "owner" ? "owners" : "renters", item.uid), updates, { merge: true }).catch(() => {})
+      ]);
+      setDeletedUsers(prev => prev.filter(i => i.uid !== item.uid));
+      setBlockedUsers(prev => prev.filter(id => id !== item.uid));
+      setToastMessage("✅ User restored successfully");
+    } else if (deletedTab === "rentals") {
+      await updateDoc(doc(db, "rentals", item.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null
+      });
+      setDeletedRentals(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Rental restored successfully");
+    } else if (deletedTab === "transactions") {
+      await updateDoc(doc(db, "withdrawals", item.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null
+      });
+      setDeletedWithdrawals(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Transaction restored successfully");
+    } else if (deletedTab === "messages") {
+      await updateDoc(doc(db, "messages", item.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null
+      });
+      setDeletedMessages(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Message restored successfully");
+    }
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
-    console.error("Failed to restore property", err);
-    setToastMessage("❌ Failed to restore property");
+    console.error("Failed to restore item", err);
+    setToastMessage("❌ Failed to restore item");
     setTimeout(() => setToastMessage(""), 3000);
   }
 };
 
 // Permanently delete a property
 const handlePermanentlyDeleteItem = async (item) => {
-  if (!window.confirm(`⚠️ Permanently delete "${item.name || 'this property'}"? This cannot be undone.`)) return;
+  const itemName = item.name || item.displayName || item.email || item.propertyName || 'this item';
+  if (!window.confirm(`⚠️ Permanently delete "${itemName}"? This cannot be undone.`)) return;
   try {
-    await deleteDoc(doc(db, "properties", item.id));
-    setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
-    setToastMessage("✅ Property permanently deleted");
+    if (deletedTab === "properties") {
+      await deleteDoc(doc(db, "properties", item.id));
+      setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Property permanently deleted");
+    } else if (deletedTab === "users") {
+      await Promise.all([
+        deleteDoc(doc(db, "users", item.uid)),
+        deleteDoc(doc(db, item.role === "owner" ? "owners" : "renters", item.uid)).catch(() => {})
+      ]);
+      setDeletedUsers(prev => prev.filter(i => i.uid !== item.uid));
+      setToastMessage("✅ User permanently deleted");
+    } else if (deletedTab === "rentals") {
+      await deleteDoc(doc(db, "rentals", item.id));
+      setDeletedRentals(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Rental permanently deleted");
+    } else if (deletedTab === "transactions") {
+      await deleteDoc(doc(db, "withdrawals", item.id));
+      setDeletedWithdrawals(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Transaction permanently deleted");
+    } else if (deletedTab === "messages") {
+      await deleteDoc(doc(db, "messages", item.id));
+      setDeletedMessages(prev => prev.filter(i => i.id !== item.id));
+      setToastMessage("✅ Message permanently deleted");
+    }
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
-    console.error("Failed to permanently delete property", err);
-    setToastMessage("❌ Failed to permanently delete property");
+    console.error("Failed to permanently delete item", err);
+    setToastMessage("❌ Failed to permanently delete item");
     setTimeout(() => setToastMessage(""), 3000);
   }
 };
@@ -1160,7 +1391,8 @@ const [showRentersList, setShowRentersList] = useState(false);
     deletedProperties.length +
     deletedUsers.length +
     deletedRentals.length +
-    deletedWithdrawals.length;
+    deletedWithdrawals.length +
+    deletedMessages.length;
 
   const deletedList = useMemo(() => {
     switch (deletedTab) {
@@ -1170,10 +1402,12 @@ const [showRentersList, setShowRentersList] = useState(false);
         return deletedRentals;
       case "transactions":
         return deletedWithdrawals;
+      case "messages":
+        return deletedMessages;
       default:
         return deletedProperties;
     }
-  }, [deletedTab, deletedProperties, deletedUsers, deletedRentals, deletedWithdrawals]);
+  }, [deletedTab, deletedProperties, deletedUsers, deletedRentals, deletedWithdrawals, deletedMessages]);
 
   return (
   <div className="dashboard-container admin-dashboard">
@@ -1256,6 +1490,26 @@ const [showRentersList, setShowRentersList] = useState(false);
                 Cancel
               </button>
               <button onClick={() => setActiveBlocklist(true)}>View Blocklist</button>
+            </div>
+
+            {/* Overdue Fee Settings */}
+            <div className="admin-settings-section" style={{ marginTop: "20px", padding: "15px", background: "#f8f9fa", borderRadius: "8px" }}>
+              <h3 style={{ marginBottom: "10px" }}>⚙️ Overdue Fee Settings</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <label><strong>Daily Overdue Fee:</strong></label>
+                <input 
+                  type="number" 
+                  value={overdueFeeAmount} 
+                  onChange={(e) => setOverdueFeeAmount(Number(e.target.value))}
+                  min="0"
+                  step="10"
+                  style={{ padding: "5px 10px", width: "100px", borderRadius: "5px", border: "1px solid #ccc" }}
+                />
+                <span>₱ per day</span>
+              </div>
+              <p style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}>
+                This fee will be applied to rentals that are overdue. You can apply it manually from the Rent List.
+              </p>
             </div>
           </div>
         )}
@@ -1340,117 +1594,11 @@ const [showRentersList, setShowRentersList] = useState(false);
                 <p>{new Set(messages.flatMap((m) => m.participants || [])).size}</p>
               </div>
               <div className={`stat-card ${deletedTotal > 0 ? "deleted-alert" : ""}`} onClick={() => setActivePage("recentlyDeleted")}>
-                <h3>🗑️ Recently Deleted</h3>
+                <h3> Recently Deleted</h3>
                 <p>{deletedTotal}</p>
                 <small>{deletedTotal > 0 ? "Click to view deleted items" : "No deleted items"}</small>
               </div>
             </div>
-
-            {/* Recently Deleted Section in Dashboard */}
-            {deletedTotal > 0 && (
-              <div className="recently-deleted-section" style={{ marginTop: "30px" }}>
-                <h2>🗑️ Recently Deleted Items</h2>
-                <div className="deleted-tabs">
-                  <button className={deletedTab === "properties" ? "active" : ""} onClick={() => setDeletedTab("properties")}>Properties</button>
-                  <button className={deletedTab === "users" ? "active" : ""} onClick={() => setDeletedTab("users")}>Users</button>
-                  <button className={deletedTab === "rentals" ? "active" : ""} onClick={() => setDeletedTab("rentals")}>Rent List</button>
-                  <button className={deletedTab === "transactions" ? "active" : ""} onClick={() => setDeletedTab("transactions")}>Transactions</button>
-                </div>
-                <div className="deleted-items-list">
-                  {deletedList.length === 0 && <p>No deleted items in this category.</p>}
-                  {deletedList.map((item) => (
-                    <div key={item.id || item.uid} className="deleted-item-card">
-                      <div className="deleted-item-image-wrapper">
-                        {deletedTab === "properties" && (
-                          <img
-                            src={item.imageUrl || "/no-image.png"}
-                            alt={item.name}
-                            className="deleted-item-image"
-                          />
-                        )}
-                        {deletedTab === "rentals" && (
-                          <img
-                            src={item.propertyImage || item.imageUrl || "/no-image.png"}
-                            alt={item.propertyName || "Rental"}
-                            className="deleted-item-image"
-                          />
-                        )}
-                      </div>
-
-                      <div className="deleted-item-details">
-                        {deletedTab === "properties" && (
-                          <>
-                            <h3>{item.name}</h3>
-                            <p><strong>Owner:</strong> {item.ownerName || item.ownerEmail || "Unknown"}</p>
-                            <p><strong>Price:</strong> ₱{item.price || "N/A"}</p>
-                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
-                          </>
-                        )}
-
-                        {deletedTab === "users" && (
-                          <>
-                            <h3>{item.displayName || item.email}</h3>
-                            <p><strong>Email:</strong> {item.email}</p>
-                            <p><strong>Role:</strong> {item.role}</p>
-                          </>
-                        )}
-
-                        {deletedTab === "rentals" && (
-                          <>
-                            <h3>{item.propertyName || "Rental"}</h3>
-                            <p><strong>Renter:</strong> {item.renterEmail || "Unknown"}</p>
-                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
-                          </>
-                        )}
-
-                        {deletedTab === "transactions" && (
-                          <>
-                            <h3>Withdrawal</h3>
-                            <p><strong>Owner:</strong> {item.ownerEmail || "N/A"}</p>
-                            <p><strong>Amount:</strong> ₱{Number(item.amount || 0).toFixed(2)}</p>
-                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
-                          </>
-                        )}
-                        
-                        <div className="deleted-info">
-                          <p><strong>Deleted By:</strong> {item.removedByAdminEmail || item.deletedBy || "Admin"}</p>
-                          <p><strong>Deleted On:</strong> {
-                            item.removedAt?.toDate
-                              ? item.removedAt.toDate().toLocaleString()
-                              : item.deletedAt?.toDate
-                              ? item.deletedAt.toDate().toLocaleString()
-                              : item.deletedAt
-                              ? new Date(item.deletedAt).toLocaleString()
-                              : item.removedAt
-                              ? new Date(item.removedAt).toLocaleString()
-                              : "N/A"
-                          }</p>
-                        </div>
-
-                        {deletedTab === "properties" && (
-                          <div className="deleted-item-actions">
-                            <button
-                              className="restore-btn"
-                              onClick={() => handleRestoreDeletedItem(item)}
-                              title="Restore this property"
-                            >
-                              ↶ Restore
-                            </button>
-                            <button
-                              className="permanent-delete-btn"
-                              onClick={() => handlePermanentlyDeleteItem(item)}
-                              title="Permanently delete"
-                            >
-                              🗑️ Permanently Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
         )}
 
@@ -1490,6 +1638,41 @@ const [showRentersList, setShowRentersList] = useState(false);
                         <p>Added: {p.createdAt?.toDate ? p.createdAt.toDate().toLocaleString() : formatDate(p.createdAt)}</p>
                         <p>Status: {p.status || "N/A"}</p>
 
+                        {/* Ratings Summary */}
+                        {p.ratingCount > 0 ? (
+                          <p><strong>Rating:</strong> ⭐ {Number(p.averageRating || 0).toFixed(1)} ({p.ratingCount} review{p.ratingCount > 1 ? "s" : ""})</p>
+                        ) : (
+                          <p><em>No ratings yet</em></p>
+                        )}
+
+                        {/* Approval status for unrated items */}
+                        {p.ratingCount === 0 && (
+                          <p style={{ color: p.adminApproved ? "#28a745" : "#ff6b6b", fontWeight: "bold" }}>
+                            {p.adminApproved ? "✅ Approved for Rental" : "⏳ Awaiting Approval"}
+                          </p>
+                        )}
+                        {p.ratingCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowReviewsFor(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                            style={{ marginTop: "6px" }}
+                          >
+                            {showReviewsFor[p.id] ? "Hide Reviews" : "View All Reviews"}
+                          </button>
+                        )}
+                        {showReviewsFor[p.id] && Array.isArray(p.ratings) && (
+                          <div className="reviews-panel" style={{ marginTop: "8px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px", padding: "8px" }}>
+                            {p.ratings.map((rv, idx) => (
+                              <div key={idx} className="review-item" style={{ marginBottom: "6px" }}>
+                                <div>⭐ {rv.rating} — {rv.review || "(no text)"}</div>
+                                <div style={{ fontSize: "0.85em", color: "#666" }}>
+                                  {rv.renterName || rv.renterEmail || "Anonymous"} • {(() => { try { return rv.createdAt ? (typeof rv.createdAt === "string" ? new Date(rv.createdAt).toLocaleString() : (rv.createdAt?.toDate ? rv.createdAt.toDate().toLocaleString() : new Date(rv.createdAt).toLocaleString())) : "N/A"; } catch { return "N/A"; } })()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         <div className="status-and-remove">
                           <div className="status-grid">
                             <div className="status-row">
@@ -1504,8 +1687,6 @@ const [showRentersList, setShowRentersList] = useState(false);
                                 onClick={async () => {
                                   if (!window.confirm("Are you sure you want to remove this property? This will be visible to the owner.")) return;
                                   try {
-                                    // Mark property as removed by admin instead of deleting
-                                    // This way only admin won't see it, but property record stays intact
                                     await updateDoc(doc(db, "properties", p.id), {
                                       removedByAdmin: true,
                                       removedAt: serverTimestamp(),
@@ -1527,6 +1708,18 @@ const [showRentersList, setShowRentersList] = useState(false);
                                 Remove
                               </button>
                             </div>
+
+                            {/* Approval button for unrated items */}
+                            {p.ratingCount === 0 && !p.adminApproved && (
+                              <div className="status-row">
+                                <button 
+                                  className="btn-approve" 
+                                  onClick={() => approvePropertyForRental(p.id)}
+                                >
+                                  ✓ Approve for Rental
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1628,6 +1821,35 @@ const [showRentersList, setShowRentersList] = useState(false);
                 <p><strong>Name:</strong> {selectedUser.displayName}</p>
               )}
               <p><strong>Role:</strong> {selectedUser.role}</p>
+              
+              {/* Role Edit Section */}
+              {roleEditUserId === selectedUser.id ? (
+                <div style={{ marginTop: "10px", padding: "10px", background: "#f0f0f0", borderRadius: "6px" }}>
+                  <label><strong>Change Role:</strong> </label>
+                  <select 
+                    value={roleEditValue} 
+                    onChange={(e) => setRoleEditValue(e.target.value)}
+                    style={{ marginRight: "8px" }}
+                  >
+                    <option value="">-- Select Role --</option>
+                    <option value="owner">Owner</option>
+                    <option value="renter">Renter</option>
+                  </select>
+                  <button onClick={() => handleUpdateUserRole(selectedUser.uid, roleEditValue)} style={{ marginRight: "6px" }}>
+                    Save
+                  </button>
+                  <button onClick={() => { setRoleEditUserId(null); setRoleEditValue(""); }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => { setRoleEditUserId(selectedUser.uid); setRoleEditValue(selectedUser.role); }}
+                  style={{ marginTop: "8px" }}
+                >
+                  ✏️ Change Role
+                </button>
+              )}
               
               {/* Additional Owner Profile Details */}
               {selectedUser.role === "owner" && (
@@ -1855,6 +2077,13 @@ const [showRentersList, setShowRentersList] = useState(false);
         <div className="rental-modal-item"><strong>Delivery Fee:</strong> ₱{rentalModal?.deliveryFee || 0}</div>
         <div className="rental-modal-item"><strong>Total Amount:</strong> ₱{rentalModal?.totalAmount || rentalModal?.totalPrice || 0}</div>
         
+        {/* Overdue Fee Display */}
+        {rentalModal?.overdueFee && (
+          <div className="rental-modal-item overdue-warning-admin">
+            <strong>⚠️ Overdue Fee:</strong> ₱{Number(rentalModal.overdueFee).toFixed(2)} ({rentalModal.overdueDays || 0} days)
+          </div>
+        )}
+        
         {/* Overdue Warning */}
         {rentalModal?.status === "Completed" && getDueDate(rentalModal) && (
           <div className={`rental-modal-item ${getDaysOverdue(rentalModal) > 0 ? "overdue-warning-admin" : ""}`}>
@@ -1862,13 +2091,22 @@ const [showRentersList, setShowRentersList] = useState(false);
             {getDaysOverdue(rentalModal) > 0 && (
               <>
                 <span className="overdue-badge-admin"> ⚠️ {getDaysOverdue(rentalModal)} days overdue!</span>
-                <button 
-                  onClick={() => sendOverdueNotification(rentalModal)}
-                  className="send-notification-btn"
-                  style={{ marginLeft: "10px", padding: "5px 10px", fontSize: "12px" }}
-                >
-                  📧 Send Reminder
-                </button>
+                <div style={{ marginTop: "10px" }}>
+                  <button 
+                    onClick={() => sendOverdueNotification(rentalModal)}
+                    className="send-notification-btn"
+                    style={{ padding: "5px 10px", fontSize: "12px", marginRight: "8px" }}
+                  >
+                    📧 Send Reminder
+                  </button>
+                  <button 
+                    onClick={() => applyOverdueFee(rentalModal)}
+                    className="apply-overdue-fee-btn"
+                    style={{ padding: "5px 10px", fontSize: "12px", background: "#ff6b6b", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}
+                  >
+                    💰 Apply Overdue Fee (₱{overdueFeeAmount}/day)
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -1957,6 +2195,13 @@ const [showRentersList, setShowRentersList] = useState(false);
                       <div><strong>Payment Method:</strong> {w.method || "N/A"}</div>
                       <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
                       <div><strong>Phone Number:</strong> {w.phone || "N/A"}</div>
+                      <div><strong>Requested Date:</strong> {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleString() : "N/A"}</div>
+                      {w.approvedAt && (
+                        <div><strong>Approved Date:</strong> {w.approvedAt?.toDate ? w.approvedAt.toDate().toLocaleString() : "N/A"}</div>
+                      )}
+                      {w.rejectedAt && (
+                        <div><strong>Rejected Date:</strong> {w.rejectedAt?.toDate ? w.rejectedAt.toDate().toLocaleString() : "N/A"}</div>
+                      )}
 
                       {w.status === "pending" && (
                         <div className="withdrawal-actions">
@@ -2183,6 +2428,7 @@ const [showRentersList, setShowRentersList] = useState(false);
             <button className={deletedTab === "users" ? "active" : ""} onClick={() => setDeletedTab("users")}>Users</button>
             <button className={deletedTab === "rentals" ? "active" : ""} onClick={() => setDeletedTab("rentals")}>Rent List</button>
             <button className={deletedTab === "transactions" ? "active" : ""} onClick={() => setDeletedTab("transactions")}>Transactions</button>
+            <button className={deletedTab === "messages" ? "active" : ""} onClick={() => setDeletedTab("messages")}>Messages</button>
           </div>
 
           {deletedList.length === 0 ? (
@@ -2242,6 +2488,16 @@ const [showRentersList, setShowRentersList] = useState(false);
                         <p><strong>Status:</strong> {item.status || "N/A"}</p>
                       </>
                     )}
+
+                    {deletedTab === "messages" && (
+                      <>
+                        <h3>Message</h3>
+                        <p><strong>From:</strong> {item.sender || "N/A"}</p>
+                        <p><strong>To:</strong> {item.receiver || "N/A"}</p>
+                        <p><strong>Message:</strong> {item.text || "N/A"}</p>
+                        <p><strong>Sent:</strong> {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString() : "N/A"}</p>
+                      </>
+                    )}
                     
                     <div className="deleted-info">
                       <p><strong>Deleted By:</strong> {item.removedByAdminEmail || item.deletedBy || "Admin"}</p>
@@ -2258,24 +2514,22 @@ const [showRentersList, setShowRentersList] = useState(false);
                       }</p>
                     </div>
 
-                    {deletedTab === "properties" && (
-                      <div className="deleted-item-actions">
-                        <button 
-                          className="restore-btn"
-                          onClick={() => handleRestoreDeletedItem(item)}
-                          title="Restore this property"
-                        >
-                          ↶ Restore
-                        </button>
-                        <button 
-                          className="permanent-delete-btn"
-                          onClick={() => handlePermanentlyDeleteItem(item)}
-                          title="Permanently delete"
-                        >
-                          🗑️ Permanently Delete
-                        </button>
-                      </div>
-                    )}
+                    <div className="deleted-item-actions">
+                      <button 
+                        className="restore-btn"
+                        onClick={() => handleRestoreDeletedItem(item)}
+                        title="Restore this item"
+                      >
+                        ↶ Restore
+                      </button>
+                      <button 
+                        className="permanent-delete-btn"
+                        onClick={() => handlePermanentlyDeleteItem(item)}
+                        title="Permanently delete"
+                      >
+                        🗑️ Permanently Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
