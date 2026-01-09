@@ -43,6 +43,11 @@ const AdminDashboard = ({ onLogout }) => {
   const [rentals, setRentals] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [overdueRentals, setOverdueRentals] = useState([]);
+  const [deletedProperties, setDeletedProperties] = useState([]);
+  const [deletedUsers, setDeletedUsers] = useState([]);
+  const [deletedRentals, setDeletedRentals] = useState([]);
+  const [deletedWithdrawals, setDeletedWithdrawals] = useState([]);
+  const [deletedTab, setDeletedTab] = useState("properties");
 
   /* ---------------- messages ---------------- */
   const [messages, setMessages] = useState([]);
@@ -128,6 +133,7 @@ const AdminDashboard = ({ onLogout }) => {
         setUsersList(list);
         setOwners(list.filter((u) => u.role === "owner"));
         setRenters(list.filter((u) => u.role === "renter"));
+        setDeletedUsers(list.filter((u) => u.deleted));
         setBlockedUsers(list.filter((u) => u.blocked || u.deleted).map((u) => u.uid));
 
         // Auto-fix missing name/photo using owner/renter docs so admin sees latest profile
@@ -141,24 +147,36 @@ const AdminDashboard = ({ onLogout }) => {
     );
 
     const unsubProps = onSnapshot(collection(db, "properties"), (snap) => {
-      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        .filter(p => !p.removedByAdmin); // Hide removed properties from admin view
+      const allProps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const arr = allProps.filter(p => !p.removedByAdmin); // Hide removed properties from admin view
       setProperties(arr);
       setFilteredProperties(propertyFilter === "all" ? arr : arr.filter((p) => (p.status || "").toLowerCase() === propertyFilter));
       const pending = arr.filter((p) => (p.status || "").toLowerCase() === "pending").length;
       const approved = arr.filter((p) => (p.status || "").toLowerCase() === "approved").length;
       const rejected = arr.filter((p) => (p.status || "").toLowerCase() === "rejected").length;
       setPropertyStats({ pending, approved, rejected });
+      
+      // Also fetch deleted properties
+      const deletedProps = allProps
+        .filter(p => p.removedByAdmin)
+        .sort((a, b) => (b.removedAt?.seconds || 0) - (a.removedAt?.seconds || 0));
+      setDeletedProperties(deletedProps);
     });
 
     const rentalsQ = query(collection(db, "rentals"), orderBy("createdAt", "desc"));
     const unsubRentals = onSnapshot(rentalsQ, (snap) => {
       const allRentals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setRentals(allRentals);
+      const activeRentals = allRentals.filter((r) => !r.deleted);
+      setRentals(activeRentals);
+      setDeletedRentals(
+        allRentals
+          .filter((r) => r.deleted)
+          .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
+      );
       
       // Check for overdue rentals
       const now = new Date();
-      const overdue = allRentals.filter((rental) => {
+      const overdue = activeRentals.filter((rental) => {
         if (rental.status !== "Completed") return false;
         
         const dateRented = rental.dateRented || rental.createdAt;
@@ -177,7 +195,15 @@ const AdminDashboard = ({ onLogout }) => {
 
     const unsubWithdrawals = onSnapshot(
       collection(db, "withdrawals"),
-      (snap) => setWithdrawals(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (snap) => {
+        const allWithdrawals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setWithdrawals(allWithdrawals.filter((w) => !w.deleted));
+        setDeletedWithdrawals(
+          allWithdrawals
+            .filter((w) => w.deleted)
+            .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
+        );
+      },
       (err) => {
         console.error("Firestore: withdrawals read denied", err);
         setToastMessage("❌ Cannot load withdrawals (check admin permissions)");
@@ -360,11 +386,23 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   const updatePropertyStatus = async (propertyId, newStatus) => {
+    // Show confirmation popup
+    const confirmMsg = `Are you sure you want to change property status to ${newStatus}?`;
+    if (!window.confirm(confirmMsg)) return;
+    
     try {
-      await updateDoc(doc(db, "properties", propertyId), { status: newStatus, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "properties", propertyId), { 
+        status: newStatus, 
+        updatedAt: serverTimestamp(),
+        statusChangedAt: serverTimestamp(),
+        statusChangedBy: adminUser?.email || "admin"
+      });
+      setToastMessage(`✅ Property status updated to ${newStatus}`);
+      setTimeout(() => setToastMessage(""), 2500);
     } catch (err) {
       console.error(err);
-      alert("Failed to update property");
+      setToastMessage("❌ Failed to update property");
+      setTimeout(() => setToastMessage(""), 3000);
     }
   };
 
@@ -577,8 +615,12 @@ const updateRentalStatus = async (rentalId, status) => {
 
     try {
       const rentalRef = doc(db, "rentals", rentalId);
-      await deleteDoc(rentalRef);
-      console.log(`Rental ${rentalId} removed`);
+      await updateDoc(rentalRef, {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: adminUser?.email || "admin",
+      });
+      console.log(`Rental ${rentalId} marked as deleted`);
     } catch (err) {
       console.error("Error removing rental:", err);
     }
@@ -981,10 +1023,49 @@ const rejectWithdrawal = async (withdrawal) => {
 // Delete a single withdrawal (no toast, removes inline)
 const handleDeleteWithdrawal = async (withdrawal) => {
   try {
-    await deleteDoc(doc(db, "withdrawals", withdrawal.id));
+    await updateDoc(doc(db, "withdrawals", withdrawal.id), {
+      deleted: true,
+      deletedAt: serverTimestamp(),
+      deletedBy: adminUser?.email || "admin",
+    });
     setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
   } catch (err) {
     console.error("Failed to delete withdrawal", err);
+  }
+};
+
+// Restore deleted property
+const handleRestoreDeletedItem = async (item) => {
+  if (!window.confirm(`Restore "${item.name || 'this property'}"?`)) return;
+  try {
+    await updateDoc(doc(db, "properties", item.id), {
+      removedByAdmin: false,
+      removedAt: null,
+      removedByAdminId: null,
+      removedByAdminEmail: null
+    });
+    setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
+    setToastMessage("✅ Property restored successfully");
+    setTimeout(() => setToastMessage(""), 2500);
+  } catch (err) {
+    console.error("Failed to restore property", err);
+    setToastMessage("❌ Failed to restore property");
+    setTimeout(() => setToastMessage(""), 3000);
+  }
+};
+
+// Permanently delete a property
+const handlePermanentlyDeleteItem = async (item) => {
+  if (!window.confirm(`⚠️ Permanently delete "${item.name || 'this property'}"? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "properties", item.id));
+    setDeletedProperties(prev => prev.filter(i => i.id !== item.id));
+    setToastMessage("✅ Property permanently deleted");
+    setTimeout(() => setToastMessage(""), 2500);
+  } catch (err) {
+    console.error("Failed to permanently delete property", err);
+    setToastMessage("❌ Failed to permanently delete property");
+    setTimeout(() => setToastMessage(""), 3000);
   }
 };
 
@@ -1053,6 +1134,7 @@ const [showRentersList, setShowRentersList] = useState(false);
         deleted: true,
         blocked: true,
         deletedAt: serverTimestamp(),
+        deletedBy: adminUser?.email || "admin",
       };
 
       await Promise.all([
@@ -1074,6 +1156,24 @@ const [showRentersList, setShowRentersList] = useState(false);
   /* ---------------- render ---------------- */
   const displayedOwners = owners.filter((u) => !u.blocked && !u.deleted);
   const displayedRenters = renters.filter((u) => !u.blocked && !u.deleted);
+  const deletedTotal =
+    deletedProperties.length +
+    deletedUsers.length +
+    deletedRentals.length +
+    deletedWithdrawals.length;
+
+  const deletedList = useMemo(() => {
+    switch (deletedTab) {
+      case "users":
+        return deletedUsers;
+      case "rentals":
+        return deletedRentals;
+      case "transactions":
+        return deletedWithdrawals;
+      default:
+        return deletedProperties;
+    }
+  }, [deletedTab, deletedProperties, deletedUsers, deletedRentals, deletedWithdrawals]);
 
   return (
   <div className="dashboard-container admin-dashboard">
@@ -1239,7 +1339,118 @@ const [showRentersList, setShowRentersList] = useState(false);
                 <h3>Messages</h3>
                 <p>{new Set(messages.flatMap((m) => m.participants || [])).size}</p>
               </div>
+              <div className={`stat-card ${deletedTotal > 0 ? "deleted-alert" : ""}`} onClick={() => setActivePage("recentlyDeleted")}>
+                <h3>🗑️ Recently Deleted</h3>
+                <p>{deletedTotal}</p>
+                <small>{deletedTotal > 0 ? "Click to view deleted items" : "No deleted items"}</small>
+              </div>
             </div>
+
+            {/* Recently Deleted Section in Dashboard */}
+            {deletedTotal > 0 && (
+              <div className="recently-deleted-section" style={{ marginTop: "30px" }}>
+                <h2>🗑️ Recently Deleted Items</h2>
+                <div className="deleted-tabs">
+                  <button className={deletedTab === "properties" ? "active" : ""} onClick={() => setDeletedTab("properties")}>Properties</button>
+                  <button className={deletedTab === "users" ? "active" : ""} onClick={() => setDeletedTab("users")}>Users</button>
+                  <button className={deletedTab === "rentals" ? "active" : ""} onClick={() => setDeletedTab("rentals")}>Rent List</button>
+                  <button className={deletedTab === "transactions" ? "active" : ""} onClick={() => setDeletedTab("transactions")}>Transactions</button>
+                </div>
+                <div className="deleted-items-list">
+                  {deletedList.length === 0 && <p>No deleted items in this category.</p>}
+                  {deletedList.map((item) => (
+                    <div key={item.id || item.uid} className="deleted-item-card">
+                      <div className="deleted-item-image-wrapper">
+                        {deletedTab === "properties" && (
+                          <img
+                            src={item.imageUrl || "/no-image.png"}
+                            alt={item.name}
+                            className="deleted-item-image"
+                          />
+                        )}
+                        {deletedTab === "rentals" && (
+                          <img
+                            src={item.propertyImage || item.imageUrl || "/no-image.png"}
+                            alt={item.propertyName || "Rental"}
+                            className="deleted-item-image"
+                          />
+                        )}
+                      </div>
+
+                      <div className="deleted-item-details">
+                        {deletedTab === "properties" && (
+                          <>
+                            <h3>{item.name}</h3>
+                            <p><strong>Owner:</strong> {item.ownerName || item.ownerEmail || "Unknown"}</p>
+                            <p><strong>Price:</strong> ₱{item.price || "N/A"}</p>
+                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                          </>
+                        )}
+
+                        {deletedTab === "users" && (
+                          <>
+                            <h3>{item.displayName || item.email}</h3>
+                            <p><strong>Email:</strong> {item.email}</p>
+                            <p><strong>Role:</strong> {item.role}</p>
+                          </>
+                        )}
+
+                        {deletedTab === "rentals" && (
+                          <>
+                            <h3>{item.propertyName || "Rental"}</h3>
+                            <p><strong>Renter:</strong> {item.renterEmail || "Unknown"}</p>
+                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                          </>
+                        )}
+
+                        {deletedTab === "transactions" && (
+                          <>
+                            <h3>Withdrawal</h3>
+                            <p><strong>Owner:</strong> {item.ownerEmail || "N/A"}</p>
+                            <p><strong>Amount:</strong> ₱{Number(item.amount || 0).toFixed(2)}</p>
+                            <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                          </>
+                        )}
+                        
+                        <div className="deleted-info">
+                          <p><strong>Deleted By:</strong> {item.removedByAdminEmail || item.deletedBy || "Admin"}</p>
+                          <p><strong>Deleted On:</strong> {
+                            item.removedAt?.toDate
+                              ? item.removedAt.toDate().toLocaleString()
+                              : item.deletedAt?.toDate
+                              ? item.deletedAt.toDate().toLocaleString()
+                              : item.deletedAt
+                              ? new Date(item.deletedAt).toLocaleString()
+                              : item.removedAt
+                              ? new Date(item.removedAt).toLocaleString()
+                              : "N/A"
+                          }</p>
+                        </div>
+
+                        {deletedTab === "properties" && (
+                          <div className="deleted-item-actions">
+                            <button
+                              className="restore-btn"
+                              onClick={() => handleRestoreDeletedItem(item)}
+                              title="Restore this property"
+                            >
+                              ↶ Restore
+                            </button>
+                            <button
+                              className="permanent-delete-btn"
+                              onClick={() => handlePermanentlyDeleteItem(item)}
+                              title="Permanently delete"
+                            >
+                              🗑️ Permanently Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1291,13 +1502,15 @@ const [showRentersList, setShowRentersList] = useState(false);
                               <button
                                 className="remove-btn"
                                 onClick={async () => {
+                                  if (!window.confirm("Are you sure you want to remove this property? This will be visible to the owner.")) return;
                                   try {
                                     // Mark property as removed by admin instead of deleting
                                     // This way only admin won't see it, but property record stays intact
                                     await updateDoc(doc(db, "properties", p.id), {
                                       removedByAdmin: true,
                                       removedAt: serverTimestamp(),
-                                      removedByAdminId: adminUser?.uid
+                                      removedByAdminId: adminUser?.uid,
+                                      removedByAdminEmail: adminUser?.email || "admin"
                                     });
                                   
                                     setProperties((prev) => prev.filter((prop) => prop.id !== p.id));
@@ -1959,6 +2172,116 @@ const [showRentersList, setShowRentersList] = useState(false);
       </div>
     )}
   </div>
+      )}
+
+      {/* Recently Deleted */}
+      {activePage === "recentlyDeleted" && (
+        <section className="recently-deleted-section">
+          <h2>🗑️ Recently Deleted Items</h2>
+          <div className="deleted-tabs">
+            <button className={deletedTab === "properties" ? "active" : ""} onClick={() => setDeletedTab("properties")}>Properties</button>
+            <button className={deletedTab === "users" ? "active" : ""} onClick={() => setDeletedTab("users")}>Users</button>
+            <button className={deletedTab === "rentals" ? "active" : ""} onClick={() => setDeletedTab("rentals")}>Rent List</button>
+            <button className={deletedTab === "transactions" ? "active" : ""} onClick={() => setDeletedTab("transactions")}>Transactions</button>
+          </div>
+
+          {deletedList.length === 0 ? (
+            <p>No deleted items in this category.</p>
+          ) : (
+            <div className="deleted-items-list">
+              {deletedList.map((item) => (
+                <div key={item.id || item.uid} className="deleted-item-card">
+                  <div className="deleted-item-image-wrapper">
+                    {deletedTab === "properties" && (
+                      <img 
+                        src={item.imageUrl || "/no-image.png"} 
+                        alt={item.name} 
+                        className="deleted-item-image"
+                      />
+                    )}
+                    {deletedTab === "rentals" && (
+                      <img 
+                        src={item.propertyImage || item.imageUrl || "/no-image.png"} 
+                        alt={item.propertyName || "Rental"} 
+                        className="deleted-item-image"
+                      />
+                    )}
+                  </div>
+
+                  <div className="deleted-item-details">
+                    {deletedTab === "properties" && (
+                      <>
+                        <h3>{item.name}</h3>
+                        <p><strong>Owner:</strong> {item.ownerName || item.ownerEmail || "Unknown"}</p>
+                        <p><strong>Price:</strong> ₱{item.price || "N/A"}</p>
+                        <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                      </>
+                    )}
+
+                    {deletedTab === "users" && (
+                      <>
+                        <h3>{item.displayName || item.email}</h3>
+                        <p><strong>Email:</strong> {item.email}</p>
+                        <p><strong>Role:</strong> {item.role}</p>
+                      </>
+                    )}
+
+                    {deletedTab === "rentals" && (
+                      <>
+                        <h3>{item.propertyName || "Rental"}</h3>
+                        <p><strong>Renter:</strong> {item.renterEmail || "Unknown"}</p>
+                        <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                      </>
+                    )}
+
+                    {deletedTab === "transactions" && (
+                      <>
+                        <h3>Withdrawal</h3>
+                        <p><strong>Owner:</strong> {item.ownerEmail || "N/A"}</p>
+                        <p><strong>Amount:</strong> ₱{Number(item.amount || 0).toFixed(2)}</p>
+                        <p><strong>Status:</strong> {item.status || "N/A"}</p>
+                      </>
+                    )}
+                    
+                    <div className="deleted-info">
+                      <p><strong>Deleted By:</strong> {item.removedByAdminEmail || item.deletedBy || "Admin"}</p>
+                      <p><strong>Deleted On:</strong> {
+                        item.removedAt?.toDate 
+                          ? item.removedAt.toDate().toLocaleString() 
+                          : item.deletedAt?.toDate
+                          ? item.deletedAt.toDate().toLocaleString()
+                          : item.deletedAt
+                          ? new Date(item.deletedAt).toLocaleString()
+                          : item.removedAt
+                          ? new Date(item.removedAt).toLocaleString()
+                          : "N/A"
+                      }</p>
+                    </div>
+
+                    {deletedTab === "properties" && (
+                      <div className="deleted-item-actions">
+                        <button 
+                          className="restore-btn"
+                          onClick={() => handleRestoreDeletedItem(item)}
+                          title="Restore this property"
+                        >
+                          ↶ Restore
+                        </button>
+                        <button 
+                          className="permanent-delete-btn"
+                          onClick={() => handlePermanentlyDeleteItem(item)}
+                          title="Permanently delete"
+                        >
+                          🗑️ Permanently Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {/* Toast Notification */}

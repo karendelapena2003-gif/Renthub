@@ -20,6 +20,7 @@ const Sidebar = ({
       { key: "rentlist", label: "Rent List" },
       { key: "transactions", label: "Transactions" },
       { key: "messages", label: "Messages" },
+      { key: "recentlyDeleted", label: "Recently Deleted" },
     ],
 
     owner: [

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword, signInWithPopup, updateProfile } from "firebase/auth";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import "./Register.css";
@@ -8,6 +8,9 @@ import "./Register.css";
 const Register = () => {
   const navigate = useNavigate();
 
+  const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -18,6 +21,11 @@ const Register = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!fullName.trim() || !phoneNumber.trim() || !address.trim()) {
+      setError("Please fill in all required fields");
+      return;
+    }
 
     // ✅ Confirm Password Validation
     if (password !== confirmPassword) {
@@ -35,12 +43,25 @@ const Register = () => {
       );
 
       const user = userCredential.user;
+      await updateProfile(user, { displayName: fullName });
 
-      await setDoc(doc(db, "users", user.uid), {
+      const userData = {
+        displayName: fullName,
         email: user.email,
+        phoneNumber,
+        address,
         role: role,
-        createdAt: new Date(),
-      });
+        photoURL: user.photoURL || "",
+        createdAt: serverTimestamp(),
+        earnings: 0,
+        totalEarnings: 0,
+        totalWithdrawn: 0,
+      };
+
+      await setDoc(doc(db, "users", user.uid), userData, { merge: true });
+
+      const roleCollection = role === "owner" ? "owners" : "renters";
+      await setDoc(doc(db, roleCollection, user.uid), userData, { merge: true });
 
       if (role === "owner") navigate("/owner-dashboard");
       else navigate("/renter-dashboard");
@@ -63,10 +84,27 @@ const Register = () => {
 
       if (!docSnap.exists()) {
         await setDoc(docRef, {
+          displayName: user.displayName || "",
           email: user.email,
+          phoneNumber: user.phoneNumber || "",
+          address: "",
           role: "renter",
-          createdAt: new Date(),
+          photoURL: user.photoURL || "",
+          createdAt: serverTimestamp(),
         });
+        await setDoc(
+          doc(db, "renters", user.uid),
+          {
+            displayName: user.displayName || "",
+            email: user.email,
+            phoneNumber: user.phoneNumber || "",
+            address: "",
+            role: "renter",
+            photoURL: user.photoURL || "",
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       const role = docSnap.exists() ? docSnap.data().role : "renter";
@@ -89,10 +127,27 @@ const Register = () => {
 
       if (!docSnap.exists()) {
         await setDoc(docRef, {
+          displayName: user.displayName || "",
           email: user.email,
+          phoneNumber: user.phoneNumber || "",
+          address: "",
           role: "renter",
-          createdAt: new Date(),
+          photoURL: user.photoURL || "",
+          createdAt: serverTimestamp(),
         });
+        await setDoc(
+          doc(db, "renters", user.uid),
+          {
+            displayName: user.displayName || "",
+            email: user.email,
+            phoneNumber: user.phoneNumber || "",
+            address: "",
+            role: "renter",
+            photoURL: user.photoURL || "",
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       const role = docSnap.exists() ? docSnap.data().role : "renter";
@@ -110,6 +165,33 @@ const Register = () => {
         <h2 className="register-title">RentHub Registration</h2>
 
         <form onSubmit={handleRegister} className="register-form">
+
+          <input
+            type="text"
+            placeholder="Full Name"
+            className="register-input"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+          />
+
+          <input
+            type="tel"
+            placeholder="Phone Number"
+            className="register-input"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            required
+          />
+
+          <input
+            type="text"
+            placeholder="Address"
+            className="register-input"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+          />
 
           <input
             type="email"

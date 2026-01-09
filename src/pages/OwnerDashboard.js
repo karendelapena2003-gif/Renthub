@@ -87,6 +87,9 @@ const OwnerDashboard = ({ onLogout }) => {
           createdAt: serverTimestamp(),
           photoURL: auth.currentUser.photoURL || "",
           role: "owner",
+          earnings: 0,
+          totalEarnings: 0,
+          totalWithdrawn: 0,
         };
 
         setDoc(userDocRef, baseProfile, { merge: true });
@@ -782,23 +785,6 @@ const currentUserEmail = auth.currentUser?.email;
     return () => unsub();
   }, [ownerEmail]);
 
-  // 2.6️⃣ Fallback: derive earnings from completed rentals if doc balance is 0
-  useEffect(() => {
-    if (!completedRentals || completedRentals.length === 0) return;
-    if (earnings > 0) return; // respect server balance when available
-
-    const sumCompleted = completedRentals.reduce((sum, r) => {
-      const daily = Number(r.dailyRate || 0);
-      const days = Number(r.rentalDays || 1);
-      return sum + (daily * days);
-    }, 0);
-
-    if (sumCompleted > 0) {
-      console.log("ℹ️ [Owner Earnings Fallback] Using completed rentals sum:", sumCompleted);
-      setEarnings(sumCompleted);
-    }
-  }, [completedRentals, earnings]);
-
 const totalWithdrawn = withdrawals
     .filter(w => w.status === "approved")  // Only approved withdrawals
     .reduce((sum, w) => sum + Number(w.amount || 0), 0);
@@ -1345,13 +1331,6 @@ useEffect(() => {
         {/* Edit Profile */}
         {isEditing && (
           <div className="profile-form">
-            <label>Full Name</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-
             <label>Profile Photo</label>
             <input
               type="file"
@@ -1542,7 +1521,7 @@ useEffect(() => {
               type="text" 
               value={withdrawAccountName} 
               onChange={e => setWithdrawAccountName(e.target.value)}
-              placeholder="Enter your full name"
+              placeholder="Enter account name"
               required
             />
           </div>
@@ -2037,6 +2016,28 @@ useEffect(() => {
                 <h3>{post.name}</h3>
                 <p><strong>Price:</strong> ₱{post.price}</p>
                 <p><strong>Status:</strong> {post.status}</p>
+                
+                {/* Admin Removal Indicator */}
+                {post.removedByAdmin && (
+                  <div style={{
+                    backgroundColor: "#ffebee",
+                    border: "2px solid #d32f2f",
+                    borderRadius: "8px",
+                    padding: "12px",
+                    marginBottom: "10px",
+                    color: "#d32f2f",
+                    fontWeight: "bold"
+                  }}>
+                    ⚠️ Removed by Admin {post.removedByAdminEmail && `(${post.removedByAdminEmail})`}
+                    {post.removedAt && (
+                      <div style={{ fontSize: "0.9em", marginTop: "5px" }}>
+                        {post.removedAt.toDate?.() 
+                          ? post.removedAt.toDate().toLocaleDateString()
+                          : new Date(post.removedAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                )}
                 
                 {/* View Renters Button */}
                 {propertyRentals.length > 0 && (
