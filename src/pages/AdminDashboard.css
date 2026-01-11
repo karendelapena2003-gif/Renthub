@@ -2629,3 +2629,1012 @@ body {
 .deleted-alert h3 {
   color: #d32f2f !important;
 }
+
+/* ===============================
+   TRANSACTION SUMMARY
+================================ */
+.transaction-summary-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.summary-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 25px 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+.summary-card.clickable-card {
+  cursor: pointer;
+}
+
+.summary-card.clickable-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.click-hint {
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.summary-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.summary-value {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.summary-subtitle {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* Different color schemes for each card */
+.summary-card:nth-child(1) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.summary-card:nth-child(2) {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.summary-card:nth-child(3) {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.summary-card:nth-child(4) {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.summary-card:nth-child(5) {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.summary-card:nth-child(6) {
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+}
+
+/* TRANSACTION ACTIONS */
+.transaction-actions {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  padding: 15px;
+  background: #f5f5f5;
+  border-radius: 10px;
+}
+
+.transaction-btn {
+  padding: 12px 22px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.download-csv-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.download-csv-btn:hover {
+  background: #45a049;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.5);
+  transform: translateY(-2px);
+}
+
+.download-json-btn {
+  background: #2196f3;
+  color: white;
+}
+
+.download-json-btn:hover {
+  background: #0b7dda;
+  box-shadow: 0 4px 15px rgba(33, 150, 243, 0.5);
+  transform: translateY(-2px);
+}
+
+.print-btn {
+  background: #ff9800;
+  color: white;
+}
+
+.print-btn:hover {
+  background: #e68900;
+  box-shadow: 0 4px 15px rgba(255, 152, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Print styles */
+@media print {
+  .sidebar,
+  .transaction-actions,
+  .rental-modal,
+  .rental-modal-overlay,
+  button:not(.print-btn),
+  input,
+  select {
+    display: none !important;
+  }
+
+  .main-dashboard {
+    margin-left: 0;
+    width: 100%;
+    padding: 20px;
+  }
+
+  .transaction-summary-container {
+    page-break-inside: avoid;
+  }
+
+  body {
+    background: white;
+  }
+}
+
+/* ===============================
+   REVENUE BREAKDOWN
+================================ */
+.revenue-breakdown {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.revenue-table-container {
+  overflow-x: auto;
+}
+
+.revenue-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.revenue-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.revenue-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.revenue-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 14px;
+}
+
+.revenue-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.revenue-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* STATUS BREAKDOWN GRID */
+.status-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.status-breakdown-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+.status-breakdown-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.status-breakdown-card h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.status-count {
+  margin: 8px 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.status-revenue {
+  margin: 8px 0 0 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Different colors for each status card */
+.status-breakdown-card:nth-child(1) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.status-breakdown-card:nth-child(2) {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.status-breakdown-card:nth-child(3) {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.status-breakdown-card:nth-child(4) {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.status-breakdown-card:nth-child(5) {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.status-breakdown-card:nth-child(6) {
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+}
+
+/* RENT LIST STATUS BREAKDOWN */
+.status-breakdown-grid-rentlist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-breakdown-card-rentlist {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.status-breakdown-card-rentlist:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.status-breakdown-card-rentlist h4 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-breakdown-card-rentlist .status-count {
+  margin: 6px 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.status-breakdown-card-rentlist .status-revenue {
+  margin: 6px 0 0 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Different colors for each status card in rent list */
+.status-breakdown-grid-rentlist > div:nth-child(2) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.status-breakdown-grid-rentlist > div:nth-child(3) {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.status-breakdown-grid-rentlist > div:nth-child(4) {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.status-breakdown-grid-rentlist > div:nth-child(5) {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.status-breakdown-grid-rentlist > div:nth-child(6) {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.status-breakdown-grid-rentlist > div:nth-child(7) {
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+}
+
+/* STATUS FILTER */
+.status-filter-container {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.status-filter-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-filter-btn {
+  padding: 15px 20px;
+  border: none;
+  background: white;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  color: #666;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.status-filter-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  background: #f9f9f9;
+}
+
+.status-filter-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
+}
+
+/* ===============================
+/* ===============================
+   RECENT TRANSACTIONS TABLE
+================================ */
+.recent-transactions-container {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.toggle-transactions-btn {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 15px;
+}
+
+.toggle-transactions-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.toggle-withdrawals-btn {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 15px;
+}
+
+.toggle-withdrawals-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.transaction-delete-btn {
+  padding: 6px 10px;
+  background: white;
+  border: 1px solid #ff9800;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transaction-delete-btn:hover {
+  background: #ff9800;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.recent-transactions-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.recent-transactions-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.recent-transactions-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.recent-transactions-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 14px;
+}
+
+.recent-transactions-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.recent-transactions-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* Clickable Transaction Rows */
+.transaction-row.clickable {
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.transaction-row.clickable:hover {
+  background: #e3f2fd !important;
+}
+
+/* Transaction Details Panel */
+.transaction-details-panel {
+  background: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 15px;
+  border-left: 4px solid #667eea;
+}
+
+.transaction-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 15px 0;
+}
+
+.transaction-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.transaction-detail-content .detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.status-processing {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-badge.status-to-deliver,
+.status-badge.status-to-receive {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.status-badge.status-completed,
+.status-badge.status-returned {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.status-badge.status-cancelled {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* GCASH PROOF INPUT */
+.withdrawal-gcash-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: monospace;
+  resize: vertical;
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+
+.withdrawal-gcash-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ===============================
+   WITHDRAWALS TABLE
+================================ */
+.withdrawals-table-container {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+}
+
+.withdrawals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.withdrawals-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.withdrawals-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.withdrawals-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 14px;
+}
+
+.withdrawals-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.withdrawals-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.withdrawal-expand-btn {
+  padding: 6px 12px;
+  border: 1px solid #667eea;
+  background: white;
+  color: #667eea;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.withdrawal-expand-btn:hover {
+  background: #667eea;
+  color: white;
+}
+
+/* Expanded Details Panel */
+.withdrawal-details-panel {
+  background: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 15px;
+  border-left: 4px solid #667eea;
+}
+
+.withdrawal-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: #333;
+  word-break: break-word;
+}
+
+/* Withdrawal Actions */
+.withdrawal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.withdrawal-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+}
+
+.withdrawal-confirm-input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.withdrawal-confirm-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.withdrawal-button-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.withdrawal-approve-btn,
+.withdrawal-reject-btn,
+.withdrawal-delete-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.withdrawal-approve-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.withdrawal-approve-btn:hover {
+  background: #45a049;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.withdrawal-reject-btn {
+  background: #f44336;
+  color: white;
+}
+
+.withdrawal-reject-btn:hover {
+  background: #da190b;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.withdrawal-delete-btn {
+  background: #ff9800;
+  color: white;
+}
+
+.withdrawal-delete-btn:hover {
+  background: #e68900;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.withdrawal-action-footer {
+  display: flex;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* IMAGE UPLOAD */
+.withdrawal-image-input {
+  padding: 8px;
+  border: 2px dashed #667eea;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.withdrawal-image-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.uploading-text {
+  display: inline-block;
+  margin-left: 10px;
+  color: #667eea;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.proof-image-preview {
+  margin-top: 10px;
+  position: relative;
+  display: inline-block;
+}
+
+.proof-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  border: 2px solid #667eea;
+  display: block;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f44336;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.remove-image-btn:hover {
+  background: #da190b;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.4);
+}
+
+/* ===============================
+   DELETED WITHDRAWALS SECTION
+================================ */
+.deleted-withdrawals-section {
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 2px solid #ffebee;
+}
+
+.deleted-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #d32f2f;
+  margin-bottom: 15px;
+}
+
+.deleted-withdrawals-table-container {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(211, 47, 47, 0.1);
+  border-left: 4px solid #d32f2f;
+  overflow-x: auto;
+}
+
+.deleted-withdrawals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.deleted-withdrawals-table thead {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.deleted-withdrawals-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.deleted-withdrawals-table td {
+  padding: 12px;
+  border-bottom: 1px solid #ffcdd2;
+  font-size: 14px;
+}
+
+.deleted-withdrawal-row:hover {
+  background: #fff5f5;
+}
+
+.status-badge.status-deleted {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.withdrawal-restore-btn {
+  padding: 8px 14px;
+  border: 1px solid #d32f2f;
+  background: white;
+  color: #d32f2f;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.withdrawal-restore-btn:hover {
+  background: #d32f2f;
+  color: white;
+  box-shadow: 0 2px 8px rgba(211, 47, 47, 0.4);
+}
+
+/* ===============================
+   SUMMARY DETAILS MODAL
+================================ */
+.summary-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.summary-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  border-bottom: 2px solid #e0e0e0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.summary-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.summary-modal-close {
+  background: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  color: #667eea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.summary-modal-close:hover {
+  background: #f0f0f0;
+  transform: rotate(90deg);
+}
+
+.summary-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.summary-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.summary-detail-table thead {
+  background: #f5f5f5;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.summary-detail-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  border-bottom: 2px solid #667eea;
+}
+
+.summary-detail-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 13px;
+}
+
+.summary-detail-table tbody tr:hover {
+  background: #f9f9f9;
+}

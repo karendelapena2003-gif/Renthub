@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.js
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Sidebar from "./Sidebar";
 import "./AdminDashboard.css";
 import { auth, db } from "../firebase";
@@ -78,10 +78,21 @@ const AdminDashboard = ({ onLogout }) => {
   const [gcashAccountName, setGcashAccountName] = useState("");
   const [gcashPhoneNumber, setGcashPhoneNumber] = useState("");
   const [expandedWithdrawal, setExpandedWithdrawal] = useState(null);
+  const [expandedTransaction, setExpandedTransaction] = useState(null); // For transaction details
+  const [showTransactionsTable, setShowTransactionsTable] = useState(true); // Toggle transactions visibility (default true)
+  const [showWithdrawalsTable, setShowWithdrawalsTable] = useState(true); // Toggle withdrawals visibility (default true)
+  const [showSummaryModal, setShowSummaryModal] = useState(null); // Which summary card to show details
+  const [gcashProof, setGcashProof] = useState({}); // {withdrawalId: "proof message"}
+  const [gcashProofImages, setGcashProofImages] = useState({}); // {withdrawalId: "image URL"}
+  const [gcashProofLoading, setGcashProofLoading] = useState({}); // {withdrawalId: boolean}
   const [rentalsByRenterState, setRentalsByRenterState] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const ownerId = auth.currentUser ? auth.currentUser.uid : null;
   const [overdueFeeAmount, setOverdueFeeAmount] = useState(50); // Default ₱50 per day
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState(null); // Filter rentals by status
+
+  // Throttle auto overdue reminders to avoid duplicate sends while snapshots update
+  const lastAutoNoticeRef = useRef(0);
 
   /* ---------------- toast notifications ---------------- */
   const [toastMessage, setToastMessage] = useState("");
@@ -348,6 +359,8 @@ const AdminDashboard = ({ onLogout }) => {
       setTimeout(() => setToastMessage(""), 2500);
     }
   };
+
+
 
   const handlePhotoSelect = (e) => {
     const f = e.target.files?.[0];
@@ -902,6 +915,127 @@ useEffect(() => {
   fetchUserPhotos();
 }, [messages, adminEmail]);
 
+// Auto-send overdue notices once per day per rental when due date has passed
+useEffect(() => {
+  if (!adminEmail || rentals.length === 0) return;
+
+  const nowMs = Date.now();
+  // Prevent rapid re-runs while snapshots stream; allow every 60s minimum
+  if (nowMs - (lastAutoNoticeRef.current || 0) < 60000) return;
+  lastAutoNoticeRef.current = nowMs;
+
+  const run = async () => {
+    const tasks = rentals
+      .filter((r) => r.status === "Completed")
+      .map(async (rental) => {
+        const dueDate = getDueDate(rental);
+        if (!dueDate) return;
+        const now = new Date();
+        if (now <= dueDate) return; // not overdue yet
+
+        const lastNoticeDate = rental.overdueNoticeSentAt?.toDate
+          ? rental.overdueNoticeSentAt.toDate()
+          : rental.overdueNoticeSentAt
+          ? new Date(rental.overdueNoticeSentAt)
+          : null;
+
+        // Only send once per 24h per rental
+        if (lastNoticeDate && now - lastNoticeDate < 24 * 60 * 60 * 1000) return;
+
+        const daysOverdue = getDaysOverdue(rental);
+        const msgText = `⚠️ OVERDUE NOTICE: Your rental "${rental.propertyName}" is ${daysOverdue} day(s) overdue. Please return the item immediately with proof of return to avoid penalties.`;
+
+        try {
+          await addDoc(collection(db, "messages"), {
+            sender: adminEmail || "admin@renthub.com",
+            receiver: rental.renterEmail,
+            participants: [
+              (adminEmail || "admin@renthub.com").toLowerCase(),
+              (rental.renterEmail || "").toLowerCase(),
+            ],
+            senderRole: "admin",
+            receiverRole: "renter",
+            text: msgText,
+            createdAt: serverTimestamp(),
+            isSystemMessage: true,
+          });
+
+          await updateDoc(doc(db, "rentals", rental.id), {
+            overdueNoticeSentAt: serverTimestamp(),
+            overdueNoticeCount: increment(1),
+          });
+        } catch (err) {
+          console.error("Auto overdue notice failed for rental", rental.id, err);
+        }
+      });
+
+    await Promise.allSettled(tasks);
+  };
+
+  run();
+}, [adminEmail, rentals]);
+
+// Auto-apply overdue fees once per rental when due date has passed
+useEffect(() => {
+  if (!adminEmail || rentals.length === 0) return;
+
+  const nowMs = Date.now();
+  // Prevent rapid re-runs; allow every 60s minimum
+  if (nowMs - (lastAutoNoticeRef.current || 0) < 60000) return;
+
+  const run = async () => {
+    const tasks = rentals
+      .filter((r) => r.status === "Completed")
+      .map(async (rental) => {
+        // Skip if fee already applied
+        if (rental.overdueFeeAppliedAt) return;
+
+        const dueDate = getDueDate(rental);
+        if (!dueDate) return;
+        const now = new Date();
+        if (now <= dueDate) return; // not overdue yet
+
+        const daysOverdue = getDaysOverdue(rental);
+        if (daysOverdue <= 0) return;
+
+        const totalOverdueFee = daysOverdue * overdueFeeAmount;
+
+        try {
+          // Update rental with overdue fee
+          await updateDoc(doc(db, "rentals", rental.id), {
+            overdueFee: totalOverdueFee,
+            overdueDays: daysOverdue,
+            overdueFeeAppliedAt: serverTimestamp(),
+            overdueFeeAppliedBy: adminEmail || "admin@renthub.com",
+          });
+
+          // Send fee notification to renter
+          await addDoc(collection(db, "messages"), {
+            sender: adminEmail || "admin@renthub.com",
+            receiver: rental.renterEmail,
+            participants: [
+              (adminEmail || "admin@renthub.com").toLowerCase(),
+              (rental.renterEmail || "").toLowerCase(),
+            ],
+            senderRole: "admin",
+            receiverRole: "renter",
+            text: `⚠️ OVERDUE FEE APPLIED: Your rental "${rental.propertyName}" has an automatic overdue fee of ₱${totalOverdueFee.toFixed(2)} for ${daysOverdue} day(s) overdue. Please settle this amount along with your rental return.`,
+            createdAt: serverTimestamp(),
+            isSystemMessage: true,
+          });
+
+          console.log(`Auto-applied overdue fee of ₱${totalOverdueFee} to rental ${rental.id}`);
+        } catch (err) {
+          console.error("Auto apply overdue fee failed for rental", rental.id, err);
+        }
+      });
+
+    await Promise.allSettled(tasks);
+  };
+
+  run();
+}, [adminEmail, rentals, overdueFeeAmount]);
+
 // Send message from admin to owner
 const handleAdminSendMessage = async (ownerEmail) => {
   const text = adminReplyText[ownerEmail]?.trim();
@@ -1025,12 +1159,9 @@ const handleDeleteAllMessages = async () => {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
     const allMessages = messages.filter(m => m.senderRole === "admin" || m.receiverRole === "admin");
     await Promise.all(allMessages.map(m => 
-      updateDoc(doc(db, "messages", m.id), {
-        deleted: true,
-        deletedAt: serverTimestamp(),
-        deletedBy: currentAdminEmail,
-      })
+      deleteDoc(doc(db, "messages", m.id))
     ));
+    setMessages(messages.filter(m => !(m.senderRole === "admin" || m.receiverRole === "admin")));
     setSelectedChat(null);
     setToastMessage("✅ All conversations deleted");
     setTimeout(() => setToastMessage(""), 2500);
@@ -1056,9 +1187,103 @@ const handleDeleteAllTransactions = async () => {
   }
 };
 
+// Download rental transaction report
+const downloadRentalReport = (format) => {
+  if (rentals.length === 0) {
+    alert("No rental data to download");
+    return;
+  }
+
+  const reportData = rentals.map(r => ({
+    "Rental ID": r.id,
+    "Property Name": r.propertyName || "N/A",
+    "Owner Email": r.ownerEmail || "N/A",
+    "Renter Name": r.renterName || "N/A",
+    "Renter Email": r.renterEmail || "N/A",
+    "Rental Date": formatDate(r.dateRented || r.createdAt),
+    "Rental Days": r.rentalDays || 0,
+    "Daily Rate": `₱${Number(r.dailyRate || 0).toFixed(2)}`,
+    "Service Fee": `₱${Number(r.serviceFee || 0).toFixed(2)}`,
+    "Delivery Fee": `₱${Number(r.deliveryFee || 0).toFixed(2)}`,
+    "Total Amount": `₱${Number(r.totalAmount || 0).toFixed(2)}`,
+    "Overdue Fee": `₱${Number(r.overdueFee || 0).toFixed(2)}`,
+    "Status": r.status || "N/A",
+    "Payment Method": r.paymentMethod || "N/A",
+  }));
+
+  if (format === "csv") {
+    // Convert to CSV
+    const headers = Object.keys(reportData[0]);
+    const csvContent = [
+      headers.join(","),
+      ...reportData.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          // Escape quotes and wrap in quotes
+          return `"${String(value).replace(/"/g, '""')}"`;
+        }).join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rental-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    setToastMessage("✅ CSV report downloaded");
+    setTimeout(() => setToastMessage(""), 2500);
+  } else if (format === "json") {
+    const jsonContent = JSON.stringify({
+      exportDate: new Date().toLocaleString(),
+      totalRentals: rentals.length,
+      totalRevenue: rentals.reduce((sum, r) => sum + (Number(r.totalAmount || 0)), 0),
+      totalOverdueFees: rentals.reduce((sum, r) => sum + (Number(r.overdueFee || 0)), 0),
+      rentals: reportData
+    }, null, 2);
+
+    const blob = new Blob([jsonContent], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rental-report-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    setToastMessage("✅ JSON report downloaded");
+    setTimeout(() => setToastMessage(""), 2500);
+  }
+};
+
 // ---------------- WITHDRAWAL APPROVAL ----------------
+const handleGcashProofImageUpload = async (withdrawalId, file) => {
+  if (!file) return;
+  
+  try {
+    setGcashProofLoading((prev) => ({ ...prev, [withdrawalId]: true }));
+    const imageUrl = await uploadToCloudinary(file);
+    setGcashProofImages((prev) => ({ ...prev, [withdrawalId]: imageUrl }));
+    alert("✅ GCash proof image uploaded successfully!");
+  } catch (err) {
+    console.error("Image upload error:", err);
+    alert("❌ Failed to upload image: " + err.message);
+  } finally {
+    setGcashProofLoading((prev) => ({ ...prev, [withdrawalId]: false }));
+  }
+};
+
 const approveWithdrawal = async (withdrawal) => {
   const { id, ownerEmail, amount, ownerId } = withdrawal;
+  const proofMessage = gcashProof[id];
+  const proofImage = gcashProofImages[id];
+  
+  if (!proofImage) {
+    alert("⚠️ Please upload a GCash proof image before approving.");
+    return;
+  }
+  
   try {
     // Find owner document ID
     let targetOwnerUid = ownerId || withdrawal.ownerUid;
@@ -1078,6 +1303,8 @@ const approveWithdrawal = async (withdrawal) => {
         status: "approved",
         approvedAt: serverTimestamp(),
         approvedBy: adminEmail,
+        gcashProof: proofMessage || "",
+        gcashProofImage: proofImage,
       });
       return;
     }
@@ -1109,20 +1336,29 @@ const approveWithdrawal = async (withdrawal) => {
       status: "approved",
       approvedAt: serverTimestamp(),
       approvedBy: adminEmail,
+      gcashProof: proofMessage || "",
+      gcashProofImage: proofImage,
     });
 
-    // Automatically notify owner
-    await addDoc(collection(db, "messages"), {
+    // Notify owner: only send a simple approval message (no proof image/message)
+    const messageText = `✅ Your withdrawal of ₱${Number(amount||0).toFixed(2)} has been approved!`;
+
+    const messageData = {
       sender: adminEmail,
       receiver: ownerEmail,
       participants: [adminEmail.toLowerCase(), ownerEmail.toLowerCase()],
       senderRole: "admin",
       receiverRole: "owner",
-      text: `✅ Your withdrawal of ₱${Number(amount||0).toFixed(2)} has been approved!`,
+      text: messageText,
       createdAt: serverTimestamp(),
-    });
+    };
 
-    alert(`✅ Withdrawal approved!\n\nAmount: ₱${amount}\nPrevious Balance: ₱${currentBalance.toFixed(2)}\nNew Balance: ₱${newBalance.toFixed(2)}`);
+    await addDoc(collection(db, "messages"), messageData);
+
+    alert(`✅ Withdrawal approved!\n\nAmount: ₱${amount}\nGCash Proof sent to owner.\nPrevious Balance: ₱${currentBalance.toFixed(2)}\nNew Balance: ₱${newBalance.toFixed(2)}`);
+    
+    // Clear the proof input
+    setGcashProof((prev) => ({ ...prev, [id]: "" }));
 
   } catch (err) {
     console.error("Withdrawal approval error:", err);
@@ -1144,7 +1380,7 @@ const rejectWithdrawal = async (withdrawal) => {
       rejectedBy: currentAdminEmail,
     });
 
-    // Send notification to owner
+    // Send notification to owner: only a simple rejection message
     if (ownerEmail) {
       await addDoc(collection(db, "messages"), {
         sender: currentAdminEmail,
@@ -1169,6 +1405,17 @@ const rejectWithdrawal = async (withdrawal) => {
 
 // Delete a single withdrawal (no toast, removes inline)
 const handleDeleteWithdrawal = async (withdrawal) => {
+  const confirmDelete = window.confirm(
+    `⚠️ DELETE WITHDRAWAL?\n\n` +
+    `Owner: ${withdrawal.ownerEmail}\n` +
+    `Amount: ₱${Number(withdrawal.amount || 0).toFixed(2)}\n` +
+    `Status: ${withdrawal.status}\n\n` +
+    `This action is PERMANENT and cannot be undone.\n` +
+    `The owner will be notified of the deletion.`
+  );
+  
+  if (!confirmDelete) return;
+  
   try {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
     
@@ -1198,6 +1445,38 @@ const handleDeleteWithdrawal = async (withdrawal) => {
   } catch (err) {
     console.error("Failed to delete withdrawal", err);
     setToastMessage("❌ Failed to delete withdrawal");
+    setTimeout(() => setToastMessage(""), 3000);
+  }
+};
+
+const handleRestoreWithdrawal = async (withdrawal) => {
+  try {
+    const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
+    
+    await updateDoc(doc(db, "withdrawals", withdrawal.id), {
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
+    });
+    
+    // Send notification to owner about withdrawal restoration
+    if (withdrawal.ownerEmail) {
+      await addDoc(collection(db, "messages"), {
+        sender: currentAdminEmail,
+        receiver: withdrawal.ownerEmail,
+        participants: [currentAdminEmail.toLowerCase(), withdrawal.ownerEmail.toLowerCase()],
+        senderRole: "admin",
+        receiverRole: "owner",
+        text: `✅ Your withdrawal request of ₱${Number(withdrawal.amount || 0).toFixed(2)} has been restored and is pending approval.`,
+        createdAt: serverTimestamp(),
+      });
+    }
+    
+    setToastMessage("✅ Withdrawal restored and owner notified");
+    setTimeout(() => setToastMessage(""), 2500);
+  } catch (err) {
+    console.error("Failed to restore withdrawal", err);
+    setToastMessage("❌ Failed to restore withdrawal");
     setTimeout(() => setToastMessage(""), 3000);
   }
 };
@@ -1640,7 +1919,7 @@ const [showRentersList, setShowRentersList] = useState(false);
 
                         {/* Ratings Summary */}
                         {p.ratingCount > 0 ? (
-                          <p><strong>Rating:</strong> ⭐ {Number(p.averageRating || 0).toFixed(1)} ({p.ratingCount} review{p.ratingCount > 1 ? "s" : ""})</p>
+                          <p><strong>Total Stars:</strong> {Array.isArray(p.ratings) ? p.ratings.reduce((sum, r) => sum + (r.rating || 0), 0) : 0} ({p.ratingCount} review{p.ratingCount > 1 ? "s" : ""})</p>
                         ) : (
                           <p><em>No ratings yet</em></p>
                         )}
@@ -1987,7 +2266,44 @@ const [showRentersList, setShowRentersList] = useState(false);
         {/* Rent List */}
         {activePage === "rentlist" && !rentalModal && (
           <section className="admin-rentlist-section">
-            <h2>Rent List</h2>
+            <h2>📋 Rent List & Summary</h2>
+
+            {/* RENTAL SUMMARY CARDS */}
+            {/* STATUS FILTER */}
+            <div className="status-filter-container">
+              <h3 style={{ marginBottom: "15px", fontSize: "16px", fontWeight: "600" }}>📊 Filter by Status</h3>
+              <div className="status-filter-buttons">
+                <button 
+                  className={`status-filter-btn ${selectedStatusFilter === null ? "active" : ""}`}
+                  onClick={() => setSelectedStatusFilter(null)}
+                >
+                  All ({rentals.length})
+                </button>
+                {(() => {
+                  const statuses = ["Processing", "To Deliver", "To Receive", "Completed", "Returned", "Cancelled"];
+                  return statuses.map(status => {
+                    const count = rentals.filter(r => r.status === status).length;
+                    return (
+                      <button 
+                        key={status}
+                        className={`status-filter-btn ${selectedStatusFilter === status ? "active" : ""}`}
+                        onClick={() => setSelectedStatusFilter(status)}
+                      >
+                        {status} ({count})
+                      </button>
+                    );
+                  });
+                })()}
+                <button 
+                  className={`status-filter-btn ${selectedStatusFilter === "overdue" ? "active" : ""}`}
+                  onClick={() => setSelectedStatusFilter("overdue")}
+                >
+                  📋 Overdue ({overdueRentals.length})
+                </button>
+              </div>
+            </div>
+
+            <hr style={{ margin: "25px 0", borderColor: "#ddd" }} />
 
             {rentals.length === 0 ? (
               <p>No rentals yet.</p>
@@ -1999,6 +2315,11 @@ const [showRentersList, setShowRentersList] = useState(false);
 
                 <div className="admin-renter-items">
                   {rentals
+                    .filter(r => {
+                      if (selectedStatusFilter === null) return true;
+                      if (selectedStatusFilter === "overdue") return getDaysOverdue(r) > 0;
+                      return r.status === selectedStatusFilter;
+                    })
                     .slice()
                     .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
                     .map((it) => {
@@ -2011,12 +2332,6 @@ const [showRentersList, setShowRentersList] = useState(false);
                             <div className="admin-rental-name"><strong>{it.propertyName}</strong></div>
                             <div className="admin-rental-price">Price: ₱{it.dailyRate || it.price || 0}</div>
                             <div className="admin-rental-ordered">Ordered: {it.createdAt?.toDate ? it.createdAt.toDate().toLocaleString() : formatDate(it.createdAt)}</div>
-                            {it.status === "Completed" && getDueDate(it) && (
-                              <div className={`admin-rental-duedate ${getDaysOverdue(it) > 0 ? "overdue" : ""}`}>
-                                Due: {getDueDate(it).toLocaleDateString()}
-                                {getDaysOverdue(it) > 0 && <span className="overdue-tag"> ⚠️ {getDaysOverdue(it)}d OVERDUE</span>}
-                              </div>
-                            )}
                             <div className="admin-rental-status">
                               Status:
                               <button onClick={() => openRentalModal(it, renterProfile)} className="admin-rental-status-btn">{it.status || "N/A"}</button>
@@ -2053,6 +2368,8 @@ const [showRentersList, setShowRentersList] = useState(false);
         <div className="rental-modal-item"><strong>Postal Code:</strong> {rentalModal?.postalCode || "N/A"}</div>
         <div className="rental-modal-item"><strong>Province:</strong> {rentalModal?.province || "N/A"}</div>
         <div className="rental-modal-item"><strong>Payment Method:</strong> {rentalModal?.paymentMethod || "N/A"}</div>
+        <div className="rental-modal-item"><strong>Date Rented:</strong> {formatDate(rentalModal?.dateRented || rentalModal?.createdAt)}</div>
+        <div className="rental-modal-item"><strong>Due Date:</strong> {getDueDate(rentalModal)?.toLocaleDateString() || "N/A"}</div>
 
         {rentalModal?.paymentMethod === "GCash" && rentalModal?.proofUrl && (
           <>
@@ -2154,78 +2471,532 @@ const [showRentersList, setShowRentersList] = useState(false);
   </div>
 )}
 
-        {/* Transactions */}
+        {/* Owner Withdrawals */}
         {activePage === "transactions" && (
           <section className="transactions-section">
+            {/* RECENT RENT TRANSACTIONS SUMMARY */}
+            <div className="recent-transactions-container">
+              <h2 className="transactions-title">📋 Recent Rent Transactions</h2>
+
+              {/* FINANCIAL SUMMARY METRICS */}
+              <div className="transaction-summary-container">
+                <div className="summary-card clickable-card" onClick={() => setShowSummaryModal('totalEarnings')}>
+                  <h3>💰 Total Earnings</h3>
+                  <p className="summary-value">₱{rentals.reduce((sum, r) => sum + (Number(r.totalAmount || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="summary-subtitle">{rentals.length} rentals</p>
+                  <p className="click-hint">Click to view details</p>
+                </div>
+
+                <div className="summary-card clickable-card" onClick={() => setShowSummaryModal('ownerEarnings')}>
+                  <h3>✅ Owner Earnings</h3>
+                  <p className="summary-value">₱{rentals.filter(r => r.status === "Completed" || r.status === "Returned").reduce((sum, r) => sum + (Number(r.totalAmount || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="summary-subtitle">{rentals.filter(r => r.status === "Completed" || r.status === "Returned").length} completed</p>
+                  <p className="click-hint">Click to view details</p>
+                </div>
+
+                <div className="summary-card clickable-card" onClick={() => setShowSummaryModal('overdueFees')}>
+                  <h3>⚠️ Total Overdue Fees</h3>
+                  <p className="summary-value">₱{rentals.reduce((sum, r) => sum + (Number(r.overdueFee || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="summary-subtitle">{rentals.filter(r => getDaysOverdue(r) > 0).length} overdue</p>
+                  <p className="click-hint">Click to view details</p>
+                </div>
+
+                <div className="summary-card clickable-card" onClick={() => setShowSummaryModal('withdrawals')}>
+                  <h3>🏦 Total Withdrawals</h3>
+                  <p className="summary-value">₱{withdrawals.reduce((sum, w) => sum + (Number(w.amount || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="summary-subtitle">{withdrawals.length} requests</p>
+                  <p className="click-hint">Click to view details</p>
+                </div>
+              </div>
+
+              {rentals.length === 0 ? (
+                <p>No rental transactions yet.</p>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
+                    <button 
+                      className="toggle-transactions-btn"
+                      onClick={() => setShowTransactionsTable(!showTransactionsTable)}
+                    >
+                      {showTransactionsTable ? "▼ Hide Transactions" : "▶ Show Transactions"}
+                    </button>
+                    <button 
+                      onClick={() => downloadRentalReport("csv")}
+                      className="transaction-btn download-csv-btn"
+                      style={{ padding: "8px 16px", fontSize: "14px" }}
+                    >
+                      📥 Download CSV
+                    </button>
+                    <button 
+                      onClick={() => downloadRentalReport("json")}
+                      className="transaction-btn download-json-btn"
+                      style={{ padding: "8px 16px", fontSize: "14px" }}
+                    >
+                      📥 Download JSON
+                    </button>
+                    <button 
+                      onClick={() => window.print()}
+                      className="transaction-btn print-btn"
+                      style={{ padding: "8px 16px", fontSize: "14px" }}
+                    >
+                      🖨️ Print Report
+                    </button>
+                  </div>
+
+                  {showTransactionsTable && (
+                    <table className="recent-transactions-table">
+                      <thead>
+                        <tr>
+                          <th>Property</th>
+                          <th>Renter</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th>Date Rented</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rentals
+                          .slice()
+                          .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                          .slice(0, 10)
+                          .map((r) => (
+                            <tr 
+                              key={r.id}
+                              className={`transaction-row clickable ${expandedTransaction === r.id ? 'expanded' : ''}`}
+                            >
+                              <td onClick={() => setExpandedTransaction(expandedTransaction === r.id ? null : r.id)}>{r.propertyName || "N/A"}</td>
+                              <td onClick={() => setExpandedTransaction(expandedTransaction === r.id ? null : r.id)}>{r.renterEmail || "N/A"}</td>
+                              <td onClick={() => setExpandedTransaction(expandedTransaction === r.id ? null : r.id)}>₱{Number(r.totalAmount || 0).toFixed(2)}</td>
+                              <td onClick={() => setExpandedTransaction(expandedTransaction === r.id ? null : r.id)}><span className={`status-badge status-${r.status?.toLowerCase().replace(/\s+/g, '-')}`}>{r.status || "N/A"}</span></td>
+                              <td onClick={() => setExpandedTransaction(expandedTransaction === r.id ? null : r.id)}>{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "N/A"}</td>
+                              <td>
+                                <button
+                                  className="transaction-delete-btn"
+                                  onClick={() => {
+                                    if (window.confirm(`Delete rental: ${r.propertyName}?\n\nRenter: ${r.renterEmail}\nAmount: ₱${Number(r.totalAmount || 0).toFixed(2)}`)) {
+                                      removeRental(r.id);
+                                    }
+                                  }}
+                                  title="Delete this transaction"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
+
+              {/* Expanded Transaction Details */}
+              {expandedTransaction && rentals.find(r => r.id === expandedTransaction) && (
+                <div className="transaction-details-panel">
+                  {(() => {
+                    const r = rentals.find(r => r.id === expandedTransaction);
+                    const daysOverdue = getDaysOverdue(r);
+                    const dueDate = getDueDate(r);
+                    return (
+                      <div className="transaction-detail-content">
+                        <h4 className="transaction-detail-title">📋 Transaction Details</h4>
+                        <div className="detail-grid">
+                          <div className="detail-row">
+                            <span className="detail-label">Property Name:</span>
+                            <span className="detail-value">{r.propertyName || "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Renter Email:</span>
+                            <span className="detail-value">{r.renterEmail || "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Owner Email:</span>
+                            <span className="detail-value">{r.ownerEmail || "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Total Amount:</span>
+                            <span className="detail-value">₱{Number(r.totalAmount || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Daily Rate:</span>
+                            <span className="detail-value">₱{Number(r.dailyRate || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Rental Days:</span>
+                            <span className="detail-value">{r.rentalDays || "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Date Rented:</span>
+                            <span className="detail-value">{r.dateRented?.toDate ? r.dateRented.toDate().toLocaleDateString() : r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Due Date:</span>
+                            <span className="detail-value">{dueDate?.toLocaleDateString() || "N/A"}</span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="detail-label">Status:</span>
+                            <span className="detail-value"><span className={`status-badge status-${r.status?.toLowerCase().replace(/\s+/g, '-')}`}>{r.status || "Pending"}</span></span>
+                          </div>
+                          {r.overdueFee && (
+                            <div className="detail-row">
+                              <span className="detail-label">Overdue Fee:</span>
+                              <span className="detail-value" style={{ color: '#d32f2f', fontWeight: '600' }}>₱{Number(r.overdueFee).toFixed(2)}</span>
+                            </div>
+                          )}
+                          {daysOverdue > 0 && (
+                            <div className="detail-row">
+                              <span className="detail-label">Days Overdue:</span>
+                              <span className="detail-value" style={{ color: '#d32f2f', fontWeight: '600' }}>{daysOverdue} days</span>
+                            </div>
+                          )}
+                          <div className="detail-row">
+                            <span className="detail-label">Created Date:</span>
+                            <span className="detail-value">{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "N/A"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
+            <hr style={{ margin: "30px 0", borderColor: "#ddd" }} />
+
             <div className="transactions-header">
-              <h2 className="transactions-title">Owner Withdrawals</h2>
+              <h2 className="transactions-title">💳 Owner Withdrawals</h2>
             </div>
             {withdrawals.length === 0 ? (
               <p>No withdrawals yet.</p>
             ) : (
-              <div className="withdrawals-list">
-              {withdrawals.map((w) => (
-                <div key={w.id} className="withdrawal-card">
-                  <div className="withdrawal-owner">
-                    <strong>Owner:</strong> {w.ownerEmail || "N/A"}
-                  </div>
+              <>
+                <button 
+                  className="toggle-withdrawals-btn"
+                  onClick={() => setShowWithdrawalsTable(!showWithdrawalsTable)}
+                >
+                  {showWithdrawalsTable ? "▼ Hide Withdrawals" : "▶ Show Withdrawals"}
+                </button>
 
-                  <div className="withdrawal-amount">
-                    <strong>Amount:</strong> ₱{Number(w.amount || 0).toFixed(2)}
-                  </div>
+                {showWithdrawalsTable && (
+                  <div className="withdrawals-table-container">
+                    <table className="withdrawals-table">
+                      <thead>
+                        <tr>
+                          <th>Owner Email</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th>Requested Date</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {withdrawals
+                      .slice()
+                      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                      .map((w) => (
+                        <tr key={w.id} className={`withdrawal-row ${expandedWithdrawal === w.id ? 'expanded' : ''}`}>
+                          <td>{w.ownerEmail || "N/A"}</td>
+                          <td>₱{Number(w.amount || 0).toFixed(2)}</td>
+                          <td><span className={`status-badge status-${w.status?.toLowerCase()}`}>{w.status || "pending"}</span></td>
+                          <td>{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : "N/A"}</td>
+                          <td>
+                            <button 
+                              className="withdrawal-expand-btn"
+                              onClick={() => setExpandedWithdrawal(expandedWithdrawal === w.id ? null : w.id)}
+                            >
+                              {expandedWithdrawal === w.id ? "▼ Hide" : "▶ Details"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
 
-                  <div className="withdrawal-status">
-                    <strong>Status:</strong>{" "}
-                    <span className="withdrawal-status-toggle" onClick={() => setExpandedWithdrawal(expandedWithdrawal === w.id ? null : w.id)}>
-                      {w.status || "pending"}
-                    </span>
-                  </div>
+                {/* Expanded Details Row */}
+                {expandedWithdrawal && withdrawals.find(w => w.id === expandedWithdrawal) && (
+                  <div className="withdrawal-details-panel">
+                    {(() => {
+                      const w = withdrawals.find(w => w.id === expandedWithdrawal);
+                      return (
+                        <div className="withdrawal-detail-content">
+                          <div className="detail-grid">
+                            <div className="detail-row">
+                              <span className="detail-label">Payment Method:</span>
+                              <span className="detail-value">{w.method || "N/A"}</span>
+                            </div>
+                            <div className="detail-row">
+                              <span className="detail-label">Account Name:</span>
+                              <span className="detail-value">{w.accountName || "N/A"}</span>
+                            </div>
+                            <div className="detail-row">
+                              <span className="detail-label">Phone Number:</span>
+                              <span className="detail-value">{w.phone || "N/A"}</span>
+                            </div>
+                            <div className="detail-row">
+                              <span className="detail-label">Requested Date:</span>
+                              <span className="detail-value">{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleString() : "N/A"}</span>
+                            </div>
+                            {w.approvedAt && (
+                              <div className="detail-row">
+                                <span className="detail-label">Approved Date:</span>
+                                <span className="detail-value">{w.approvedAt?.toDate ? w.approvedAt.toDate().toLocaleString() : "N/A"}</span>
+                              </div>
+                            )}
+                            {w.rejectedAt && (
+                              <div className="detail-row">
+                                <span className="detail-label">Rejected Date:</span>
+                                <span className="detail-value">{w.rejectedAt?.toDate ? w.rejectedAt.toDate().toLocaleString() : "N/A"}</span>
+                              </div>
+                            )}
+                          </div>
 
-                  <div className="withdrawal-delete-row">
-                    <button
-                      className="withdrawal-delete-btn"
-                      onClick={() => handleDeleteWithdrawal(w)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                          {w.status === "pending" && (
+                            <div className="withdrawal-actions">
+                              <label>
+                                Confirm Amount:
+                                <input
+                                  type="number"
+                                  value={w.confirmAmount ?? w.amount}
+                                  onChange={(e) => {
+                                    const updatedAmount = Number(e.target.value);
+                                    setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, confirmAmount: updatedAmount } : item)));
+                                  }}
+                                  className="withdrawal-confirm-input"
+                                />
+                              </label>
 
-                  {expandedWithdrawal === w.id && (
-                    <div className="withdrawal-expanded">
-                      <div><strong>Payment Method:</strong> {w.method || "N/A"}</div>
-                      <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
-                      <div><strong>Phone Number:</strong> {w.phone || "N/A"}</div>
-                      <div><strong>Requested Date:</strong> {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleString() : "N/A"}</div>
-                      {w.approvedAt && (
-                        <div><strong>Approved Date:</strong> {w.approvedAt?.toDate ? w.approvedAt.toDate().toLocaleString() : "N/A"}</div>
-                      )}
-                      {w.rejectedAt && (
-                        <div><strong>Rejected Date:</strong> {w.rejectedAt?.toDate ? w.rejectedAt.toDate().toLocaleString() : "N/A"}</div>
-                      )}
+                              <label>
+                                📷 Upload GCash Proof Image:
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                      handleGcashProofImageUpload(w.id, e.target.files[0]);
+                                    }
+                                  }}
+                                  disabled={gcashProofLoading[w.id] || false}
+                                  className="withdrawal-image-input"
+                                />
+                                {gcashProofLoading[w.id] && <span className="uploading-text">⏳ Uploading...</span>}
+                                {gcashProofImages[w.id] && (
+                                  <div className="proof-image-preview">
+                                    <img src={gcashProofImages[w.id]} alt="GCash Proof" className="proof-image" />
+                                    <button
+                                      type="button"
+                                      onClick={() => setGcashProofImages((prev) => {
+                                        const updated = { ...prev };
+                                        delete updated[w.id];
+                                        return updated;
+                                      })}
+                                      className="remove-image-btn"
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  </div>
+                                )}
+                              </label>
 
-                      {w.status === "pending" && (
-                        <div className="withdrawal-actions">
-                          <label>
-                            Confirm Amount:
-                            <input
-                              type="number"
-                              value={w.confirmAmount ?? w.amount}
-                              onChange={(e) => {
-                                const updatedAmount = Number(e.target.value);
-                                setWithdrawals((prev) => prev.map((item) => (item.id === w.id ? { ...item, confirmAmount: updatedAmount } : item)));
-                              }}
-                              className="withdrawal-confirm-input"
-                            />
-                          </label>
+                              <div className="withdrawal-button-group">
+                                <button onClick={() => approveWithdrawal(w)} className="withdrawal-approve-btn">✅ Approve</button>
+                                <button onClick={() => rejectWithdrawal(w)} className="withdrawal-reject-btn">❌ Reject</button>
+                                <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
+                              </div>
+                            </div>
+                          )}
 
-                          <button onClick={() => approveWithdrawal(w)} className="withdrawal-approve-btn">Approve</button>
-                          <button onClick={() => rejectWithdrawal(w)} className="withdrawal-reject-btn">Reject</button>
+                          {w.status !== "pending" && (
+                            <div className="withdrawal-action-footer">
+                              <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+                )}
+              </>
+            )}
+
+            {/* DELETED WITHDRAWALS SECTION */}
+            {withdrawals.filter(w => w.deleted).length > 0 && (
+              <div className="deleted-withdrawals-section">
+                <h3 className="deleted-section-title">🗑️ Deleted Withdrawals (Can be restored)</h3>
+                <div className="deleted-withdrawals-table-container">
+                  <table className="deleted-withdrawals-table">
+                    <thead>
+                      <tr>
+                        <th>Owner Email</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Deleted Date</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {withdrawals
+                        .filter(w => w.deleted)
+                        .slice()
+                        .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
+                        .map((w) => (
+                          <tr key={w.id} className="deleted-withdrawal-row">
+                            <td>{w.ownerEmail || "N/A"}</td>
+                            <td>₱{Number(w.amount || 0).toFixed(2)}</td>
+                            <td><span className="status-badge status-deleted">Deleted</span></td>
+                            <td>{w.deletedAt?.toDate ? w.deletedAt.toDate().toLocaleDateString() : "N/A"}</td>
+                            <td>
+                              <button 
+                                className="withdrawal-restore-btn"
+                                onClick={() => handleRestoreWithdrawal(w)}
+                              >
+                                ↩️ Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* SUMMARY DETAILS MODAL */}
+            {showSummaryModal && (
+              <div className="summary-modal-overlay" onClick={() => setShowSummaryModal(null)}>
+                <div className="summary-modal-content" onClick={(e) => e.stopPropagation()}>
+                  <div className="summary-modal-header">
+                    <h3>
+                      {showSummaryModal === 'totalEarnings' && '💰 Total Earnings Breakdown'}
+                      {showSummaryModal === 'ownerEarnings' && '✅ Owner Earnings (Completed Rentals)'}
+                      {showSummaryModal === 'overdueFees' && '⚠️ Overdue Fees Breakdown'}
+                      {showSummaryModal === 'withdrawals' && '🏦 Withdrawal Requests'}
+                    </h3>
+                    <button className="summary-modal-close" onClick={() => setShowSummaryModal(null)}>✕</button>
+                  </div>
+
+                  <div className="summary-modal-body">
+                    {showSummaryModal === 'totalEarnings' && (
+                      <table className="summary-detail-table">
+                        <thead>
+                          <tr>
+                            <th>Property</th>
+                            <th>Renter</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rentals
+                            .slice()
+                            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                            .map((r) => (
+                              <tr key={r.id}>
+                                <td>{r.propertyName || "N/A"}</td>
+                                <td>{r.renterEmail || "N/A"}</td>
+                                <td>₱{Number(r.totalAmount || 0).toFixed(2)}</td>
+                                <td><span className={`status-badge status-${r.status?.toLowerCase().replace(/\s+/g, '-')}`}>{r.status}</span></td>
+                                <td>{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "N/A"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {showSummaryModal === 'ownerEarnings' && (
+                      <table className="summary-detail-table">
+                        <thead>
+                          <tr>
+                            <th>Property</th>
+                            <th>Owner</th>
+                            <th>Renter</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rentals
+                            .filter(r => r.status === "Completed" || r.status === "Returned")
+                            .slice()
+                            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                            .map((r) => (
+                              <tr key={r.id}>
+                                <td>{r.propertyName || "N/A"}</td>
+                                <td>{r.ownerEmail || "N/A"}</td>
+                                <td>{r.renterEmail || "N/A"}</td>
+                                <td>₱{Number(r.totalAmount || 0).toFixed(2)}</td>
+                                <td><span className={`status-badge status-${r.status?.toLowerCase().replace(/\s+/g, '-')}`}>{r.status}</span></td>
+                                <td>{r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "N/A"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {showSummaryModal === 'overdueFees' && (
+                      <table className="summary-detail-table">
+                        <thead>
+                          <tr>
+                            <th>Property</th>
+                            <th>Renter</th>
+                            <th>Overdue Fee</th>
+                            <th>Days Overdue</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rentals
+                            .filter(r => getDaysOverdue(r) > 0)
+                            .slice()
+                            .sort((a, b) => getDaysOverdue(b) - getDaysOverdue(a))
+                            .map((r) => (
+                              <tr key={r.id}>
+                                <td>{r.propertyName || "N/A"}</td>
+                                <td>{r.renterEmail || "N/A"}</td>
+                                <td style={{color: '#d32f2f', fontWeight: '600'}}>₱{Number(r.overdueFee || 0).toFixed(2)}</td>
+                                <td style={{color: '#d32f2f', fontWeight: '600'}}>{getDaysOverdue(r)} days</td>
+                                <td>{getDueDate(r)?.toLocaleDateString() || "N/A"}</td>
+                                <td><span className={`status-badge status-${r.status?.toLowerCase().replace(/\s+/g, '-')}`}>{r.status}</span></td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {showSummaryModal === 'withdrawals' && (
+                      <table className="summary-detail-table">
+                        <thead>
+                          <tr>
+                            <th>Owner Email</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Method</th>
+                            <th>Requested Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {withdrawals
+                            .slice()
+                            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                            .map((w) => (
+                              <tr key={w.id}>
+                                <td>{w.ownerEmail || "N/A"}</td>
+                                <td>₱{Number(w.amount || 0).toFixed(2)}</td>
+                                <td><span className={`status-badge status-${w.status?.toLowerCase()}`}>{w.status || "pending"}</span></td>
+                                <td>{w.method || "N/A"}</td>
+                                <td>{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : "N/A"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </section>
