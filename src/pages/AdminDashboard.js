@@ -1299,12 +1299,16 @@ const approveWithdrawal = async (withdrawal) => {
     if (!targetOwnerUid) {
       alert("❌ Cannot find owner document. Withdrawal will be approved but balance won't be deducted.");
       // Still approve the withdrawal for record purposes
+      // Preserve ownerDeleted flag
+      const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
+      const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
       await updateDoc(doc(db, "withdrawals", id), {
         status: "approved",
         approvedAt: serverTimestamp(),
         approvedBy: adminEmail,
         gcashProof: proofMessage || "",
         gcashProofImage: proofImage,
+        ownerDeleted: existing.ownerDeleted || false,
       });
       return;
     }
@@ -1332,12 +1336,16 @@ const approveWithdrawal = async (withdrawal) => {
     const newBalance = Math.max(0, currentBalance - withdrawAmount);
 
     // Update withdrawal status to approved
+    // Preserve ownerDeleted flag
+    const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
+    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
     await updateDoc(doc(db, "withdrawals", id), {
       status: "approved",
       approvedAt: serverTimestamp(),
       approvedBy: adminEmail,
       gcashProof: proofMessage || "",
       gcashProofImage: proofImage,
+      ownerDeleted: existing.ownerDeleted || false,
     });
 
     // Notify owner: only send a simple approval message (no proof image/message)
@@ -1374,10 +1382,14 @@ const rejectWithdrawal = async (withdrawal) => {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
     
     // Update withdrawal status to rejected
+    // Preserve ownerDeleted flag
+    const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
+    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
     await updateDoc(doc(db, "withdrawals", id), {
       status: "rejected",
       rejectedAt: serverTimestamp(),
       rejectedBy: currentAdminEmail,
+      ownerDeleted: existing.ownerDeleted || false,
     });
 
     // Send notification to owner: only a simple rejection message
@@ -1410,18 +1422,38 @@ const handleDeleteWithdrawal = async (withdrawal) => {
     `Owner: ${withdrawal.ownerEmail}\n` +
     `Amount: ₱${Number(withdrawal.amount || 0).toFixed(2)}\n` +
     `Status: ${withdrawal.status}\n\n` +
-    `This will only remove the transaction from the admin view. The owner will NOT be notified and will still see this in their history.`
+    `This will only remove the transaction from the admin view. The owner will receive a notification but their balance will NOT be affected.`
   );
   if (!confirmDelete) return;
   try {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
+    // Preserve ownerDeleted flag, DO NOT set deleted or ownerDeleted here
+    const withdrawalDoc = await getDoc(doc(db, "withdrawals", withdrawal.id));
+    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
     await updateDoc(doc(db, "withdrawals", withdrawal.id), {
       adminDeleted: true,
       adminDeletedAt: serverTimestamp(),
       adminDeletedBy: currentAdminEmail,
+      // Only preserve ownerDeleted, do not set deleted
+      ownerDeleted: existing.ownerDeleted || false,
     });
     setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
-    setToastMessage("✅ Withdrawal deleted from admin view only");
+
+    // Send notification to owner
+    if (withdrawal.ownerEmail) {
+      await addDoc(collection(db, "messages"), {
+        sender: currentAdminEmail,
+        receiver: withdrawal.ownerEmail,
+        participants: [currentAdminEmail.toLowerCase(), withdrawal.ownerEmail.toLowerCase()],
+        senderRole: "admin",
+        receiverRole: "owner",
+        text: `❗ Your withdrawal of ₱${Number(withdrawal.amount || 0).toFixed(2)} was removed from the admin transaction list. This does NOT affect your balance. Please contact admin if you have questions.`,
+        createdAt: serverTimestamp(),
+        isSystemMessage: true,
+      });
+    }
+
+    setToastMessage("✅ Withdrawal deleted from admin view and owner notified");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("Failed to delete withdrawal", err);

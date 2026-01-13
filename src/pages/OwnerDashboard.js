@@ -1,4 +1,4 @@
-// ✅ src/pages/OwnerDashboard.js
+
 import React, { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "./Sidebar";
@@ -16,19 +16,51 @@ import {
   deleteDoc,
   setDoc,
   getDocs,
-   orderBy,
-   getDoc,
+  orderBy,
+  getDoc,
 } from "firebase/firestore";
 import { CLOUD_NAME, UPLOAD_PRESET } from "../cloudinaryConfig";
 import { useNavigate } from "react-router-dom";
-import {   getAuth, updateProfile, EmailAuthProvider, reauthenticateWithCredential,  updatePassword, reauthenticateWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword, reauthenticateWithPopup, GoogleAuthProvider } from "firebase/auth";
+
+
 
 const OwnerDashboard = ({ onLogout }) => {
-    // Tab state for Recently Deleted
-    const [recentlyDeletedTab, setRecentlyDeletedTab] = useState('rentalitem');
+      // Utility: Fix all withdrawal documents to ensure correct ownerId and ownerEmail
+      // Run this function once if you have permission errors when removing withdrawals
+      async function fixAllWithdrawalsOwnerFields() {
+        try {
+          const withdrawalsCol = collection(db, "withdrawals");
+          const withdrawalsSnap = await getDocs(withdrawalsCol);
+          let fixed = 0;
+          for (const wDoc of withdrawalsSnap.docs) {
+            const wData = wDoc.data();
+            let needsUpdate = false;
+            const updateObj = {};
+            // Fix ownerId if missing or wrong
+            if (!wData.ownerId || wData.ownerId !== auth.currentUser.uid) {
+              updateObj.ownerId = auth.currentUser.uid;
+              needsUpdate = true;
+            }
+            // Fix ownerEmail if missing or wrong
+            if (!wData.ownerEmail || wData.ownerEmail !== auth.currentUser.email) {
+              updateObj.ownerEmail = auth.currentUser.email;
+              needsUpdate = true;
+            }
+            if (needsUpdate) {
+              await updateDoc(doc(db, "withdrawals", wDoc.id), updateObj);
+              fixed++;
+              console.log(`✅ Fixed withdrawal ${wDoc.id}:`, updateObj);
+            }
+          }
+          alert(`Fixed ${fixed} withdrawal documents. You can now try removing withdrawals again.`);
+        } catch (err) {
+          console.error("❌ Error fixing withdrawals:", err);
+          alert("❌ Error fixing withdrawals: " + err.message);
+        }
+      }
+      // To run: Open browser console and call fixAllWithdrawalsOwnerFields()
   const [user, setUser] = useState(auth.currentUser);
-  const [deletedPosts, setDeletedPosts] = useState([]);
-  const [deletedEarnings, setDeletedEarnings] = useState([]);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photo, setPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(user?.photoURL || "");
@@ -143,14 +175,13 @@ const OwnerDashboard = ({ onLogout }) => {
     return () => unsub();
   }, []);
 
-// Fetch active and deleted posts
+// Fetch active posts only
 useEffect(() => {
   const q = query(collection(db, "properties"), where("ownerEmail", "==", ownerEmail));
   const unsub = onSnapshot(q, (snapshot) => {
     const postData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     setPosts(postData.filter(p => !p.deleted));
     setRentals(postData.filter(p => !p.deleted));
-    setDeletedPosts(postData.filter(p => p.deleted));
   });
   return () => unsub();
 }, [ownerEmail]);
@@ -606,32 +637,6 @@ useEffect(() => {
     }
   };
 
-  // Restore post
-  const handleRestorePost = async (id) => {
-    try {
-      await updateDoc(doc(db, "properties", id), { deleted: false });
-      setToastMessage("✅ Post restored");
-      setTimeout(() => setToastMessage(""), 2500);
-    } catch (err) {
-      console.error(err);
-      setToastMessage("❌ Failed to restore post");
-      setTimeout(() => setToastMessage(""), 2500);
-    }
-  };
-
-  // Permanently delete post
-  const handlePermanentDeletePost = async (id) => {
-    if (!window.confirm("Permanently delete this post? This cannot be undone.")) return;
-    try {
-      await deleteDoc(doc(db, "properties", id));
-      setToastMessage("✅ Post permanently deleted");
-      setTimeout(() => setToastMessage(""), 2500);
-    } catch (err) {
-      console.error(err);
-      setToastMessage("❌ Failed to permanently delete post");
-      setTimeout(() => setToastMessage(""), 2500);
-    }
-  };
 
   const handleDeleteRental = async (rentalId) => {
     if (!window.confirm("Are you sure you want to delete this rental record?")) {
@@ -681,45 +686,9 @@ useEffect(() => {
     }
   };
 
-  // Soft delete earning
-  const handleDeleteEarning = async (rentalId, amount) => {
-    try {
-      await updateDoc(doc(db, "rentals", rentalId), { deleted: true, deletedAt: serverTimestamp() });
-      setEarningsFeedback("✅ Moved to Recently Deleted");
-      setTimeout(() => setEarningsFeedback(""), 2000);
-    } catch (err) {
-      console.error(err);
-      setEarningsFeedback("❌ Failed to delete earning");
-      setTimeout(() => setEarningsFeedback(""), 3000);
-    }
-  };
+  // Remove earning delete for owner: Only admin can remove from rent list
+  // (No-op: function removed)
 
-  // Restore earning
-  const handleRestoreEarning = async (rentalId) => {
-    try {
-      await updateDoc(doc(db, "rentals", rentalId), { deleted: false });
-      setEarningsFeedback("✅ Earning restored");
-      setTimeout(() => setEarningsFeedback(""), 2000);
-    } catch (err) {
-      console.error(err);
-      setEarningsFeedback("❌ Failed to restore earning");
-      setTimeout(() => setEarningsFeedback(""), 2000);
-    }
-  };
-
-  // Permanently delete earning
-  const handlePermanentDeleteEarning = async (rentalId) => {
-    if (!window.confirm("Permanently delete this earning? This cannot be undone.")) return;
-    try {
-      await deleteDoc(doc(db, "rentals", rentalId));
-      setEarningsFeedback("✅ Earning permanently deleted");
-      setTimeout(() => setEarningsFeedback(""), 2000);
-    } catch (err) {
-      console.error(err);
-      setEarningsFeedback("❌ Failed to permanently delete earning");
-      setTimeout(() => setEarningsFeedback(""), 2000);
-    }
-  };
 
   // Delete all completed earnings
   const handleDeleteAllEarnings = async () => {
@@ -763,20 +732,8 @@ useEffect(() => {
     }
   };
 
-  // Delete individual withdrawal
-  const handleDeleteWithdrawal = async (withdrawalId) => {
-    if (!window.confirm("🗑️ Delete this withdrawal record?")) return;
-    try {
-      await deleteDoc(doc(db, "withdrawals", withdrawalId));
-      setWithdrawals(prev => prev.filter(w => w.id !== withdrawalId));
-      setToastMessage("✅ Withdrawal record deleted");
-      setTimeout(() => setToastMessage(""), 2500);
-    } catch (err) {
-      console.error(err);
-      setToastMessage("❌ Failed to delete withdrawal");
-      setTimeout(() => setToastMessage(""), 3500);
-    }
-  };
+  // Remove withdrawal delete for owner: Only admin can remove from rent list
+  // (No-op: function removed)
 
    // ---------- Handle Withdraw ----------
 async function updateOldWithdrawalsWithEmails() {
@@ -968,12 +925,15 @@ const currentUserEmail = auth.currentUser?.email;
     return () => unsub();
   }, [ownerEmail]);
 
-const totalWithdrawn = withdrawals
-    .filter(w => w.status === "approved")  // Only approved withdrawals
-    .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+// Only show withdrawals not soft-deleted by owner in main history
+const visibleWithdrawals = withdrawals.filter(w => !w.ownerDeleted);
 
-  const balance = Math.max(0, earnings - totalWithdrawn);  // Balance after withdrawals (cannot go negative)
-  const withdrawn = totalWithdrawn;
+const totalWithdrawn = visibleWithdrawals
+  .filter(w => w.status === "approved")  // Only approved withdrawals
+  .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+
+const balance = Math.max(0, earnings - totalWithdrawn);  // Balance after withdrawals (cannot go negative)
+const withdrawn = totalWithdrawn;
 
    const toggleWithdrawals = () => setShowWithdrawals(prev => !prev);
 
@@ -1602,10 +1562,14 @@ useEffect(() => {
       </div>
 
       {/* Rental Items */}
-      <div className="overview-card" onClick={() => setActivePage("rentalitem")}>
-        <h3>Rental Items</h3>
-        <p>Total: {rentals.length}</p>
-        <small>Active properties listed</small>
+      <div className="overview-card" onClick={() => setActivePage("rentalitem")}> 
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <h3>Rental Items</h3>
+            <p>Total: {rentals.length}</p>
+            <small>Active properties listed</small>
+          </div>
+        </div>
       </div>
 
       {/* Total Earnings */}
@@ -1632,57 +1596,7 @@ useEffect(() => {
 )}
 
 
-  {/* RECENTLY DELETED SECTION */}
-  {activePage === "recentlyDeleted" && userRole === "owner" && (
-    <section className="recently-deleted-section">
-      <h2>Recently Deleted</h2>
-      <div className="deleted-section">
-        <div className="deleted-tabs">
-          <button
-            className={recentlyDeletedTab === 'rentalitem' ? 'active' : ''}
-            onClick={() => setRecentlyDeletedTab('rentalitem')}
-          >
-            Rental Item
-          </button>
-        </div>
-        <input
-          type="text"
-          placeholder="Search deleted rental items..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          style={{ marginBottom: 16, padding: 8, width: "100%" }}
-        />
-        {deletedPosts.length === 0 ? (
-          <p>No deleted rental items.</p>
-        ) : (
-          <div className="deleted-list">
-            {deletedPosts
-              .filter(post =>
-                post.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                post.description?.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-              .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
-              .map(post => (
-                <div key={post.id} className="deleted-item-card">
-                  {post.imageUrl && (
-                    <img className="deleted-item-image" src={post.imageUrl} alt={post.name} />
-                  )}
-                  <h4>{post.name}</h4>
-                  <p>Price: ₱{post.price}</p>
-                  <p>Status: {post.status}</p>
-                  <p>Deleted: {post.deletedAt?.toDate ? post.deletedAt.toDate().toLocaleString() : "N/A"}</p>
-                  <p>Description: {post.description}</p>
-                  <div className="deleted-actions">
-                    <button className="restore-btn" onClick={() => handleRestorePost(post.id)}>Restore</button>
-                    <button className="permanent-delete-btn" onClick={() => handlePermanentDeletePost(post.id)}>Delete Permanently</button>
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
-    </section>
-    )}
+  {/* TOTAL EARNINGS SECTION */}
 {activePage === "totalEarnings" && userRole === "owner" && (
   <section className="totalearnings-owner">
     <h2>Total Earnings</h2>
@@ -1932,14 +1846,12 @@ useEffect(() => {
                       <div className="earnings-item-header">
                         <span className="status-badge completed">✅ Completed</span>
                       </div>
-                      
                       {/* Property Image */}
                       {(rental.propertyImage || rental.imageUrl) && (
                         <div className="earnings-image-container">
                           <img src={rental.propertyImage || rental.imageUrl} alt={rental.propertyName || rental.name} className="earnings-property-image" />
                         </div>
                       )}
-                      
                       <div className="earnings-details">
                         <div className="detail-row">
                           <strong>Property:</strong>
@@ -1976,14 +1888,6 @@ useEffect(() => {
                           </span>
                         </div>
                       </div>
-                      
-                      {/* Delete Button */}
-                      <button 
-                        className="delete-earning-btn"
-                        onClick={() => handleDeleteEarning(rental.id, Number(rental.dailyRate || 0) * Number(rental.rentalDays || 1))}
-                      >
-                         Delete
-                      </button>
                     </div>
                   ))}
               </div>

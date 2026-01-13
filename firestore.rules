@@ -123,7 +123,16 @@ service cloud.firestore {
         (isSignedIn() && request.auth.uid == resource.data.ownerId) ||
         isEmail(resource.data.ownerEmail);
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
-      allow update, delete: if isAdmin();
+      // Allow owner to set ownerDeleted true or false, as long as only that field is changed
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (
+          (request.auth.uid == resource.data.ownerId || request.auth.token.email == resource.data.ownerEmail)
+        ) &&
+        // Only allow changing ownerDeleted, not adminDeleted or other fields
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['ownerDeleted'])
+      );
+      allow delete: if isAdmin();
     }
 
     // Support tickets: anyone signed-in can create; only ticket owner or admin can read; only admin can modify
