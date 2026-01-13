@@ -1,3 +1,185 @@
+/* Withdrawal History Table (Admin Style) */
+.withdrawals-table-wrapper {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+
+.withdrawal-details-table {
+  width: 100%;
+  background: #fff;
+  color: #111;
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  margin-bottom: 0;
+}
+.withdrawal-details-table thead tr {
+  background: #f5f5f5;
+}
+.withdrawal-details-table th, .withdrawal-details-table td {
+  padding: 10px 8px;
+  text-align: left;
+  color: #111;
+  font-weight: 500;
+}
+.withdrawal-details-table th {
+  font-weight: 600;
+}
+.withdrawal-row {
+  transition: background 0.2s;
+}
+.withdrawal-row:hover {
+  background: #e6f4ff;
+}
+.details-btn {
+  background: #2196F3;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s, transform 0.15s;
+}
+.details-btn:hover {
+  background: #1769aa;
+  transform: translateY(-1px);
+}
+.expandable-row {
+  background: #e6f4ff;
+}
+.withdrawal-expanded {
+  background: #e6f4ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 0;
+  font-size: 13px;
+}
+.withdrawal-expanded > div {
+  margin: 4px 0;
+}
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  background: #9e9e9e;
+}
+.status-badge.approved { background: #2eaf5d; }
+.status-badge.pending { background: #f4b400; }
+.status-badge.rejected { background: #c62828; }
+.withdrawal-owner-email {
+  color: #111;
+  font-weight: 500;
+}
+/* Limit width of search input in Recently Deleted section */
+.recently-deleted-section input[type="text"] {
+  max-width: 350px;
+  width: 100%;
+  margin: 0 0 16px 0;
+  display: block;
+}
+/* Recently Deleted Section (Admin Style) */
+.recently-deleted-section {
+  background: #5fabc0;
+  border-radius: 12px;
+  padding: 15px 20px;
+  margin: 30px auto 20px;
+  max-width: 900px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: #000000;
+}
+.recently-deleted-section h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #1c1d1e;
+  font-size: 18px;
+  text-align: center;
+}
+.deleted-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+.deleted-item-card {
+  background: white;
+  border: 2px solid #ffcdd2;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  padding-bottom: 10px;
+}
+.deleted-item-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+.deleted-item-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  opacity: 0.7;
+  border-bottom: 1px solid #eee;
+}
+.deleted-item-card h4 {
+  margin: 10px 0 6px 0;
+  font-size: 16px;
+  color: #1c1d1e;
+  text-align: left;
+  padding: 0 12px;
+}
+.deleted-item-card p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #333;
+  padding: 0 12px;
+}
+.deleted-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+.restore-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.restore-btn:hover {
+  background: #45a049;
+}
+.permanent-delete-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: #d32f2f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.permanent-delete-btn:hover {
+  background: #b71c1c;
+}
 /* Make all status badges in withdrawal history black */
 .status-badge.status-black {
   color: #111 !important;
@@ -1723,6 +1905,56 @@
   border-left: 4px solid #4caf50;
   border-radius: 6px;
   font-size: 13px;
+}
+/* ===== WITHDRAWAL DETAILS SECTION (INLINE STYLE REPLACEMENTS) ===== */
+.confirm-amount-label {
+  font-weight: 600;
+  color: #222;
+  margin-right: 8px;
+  font-size: 1em;
+}
+.confirm-amount-value {
+  color: #111;
+  font-size: 1em;
+  margin-right: 18px;
+}
+.gcash-proof-image-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+.gcash-proof-image {
+  max-width: 120px;
+  max-height: 120px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fafafa;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.gcash-proof-image:hover {
+  box-shadow: 0 2px 8px rgba(33,150,243,0.18);
+}
+.withdrawal-action-btn-wrapper {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.restore-withdrawal-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.restore-withdrawal-btn:hover {
+  background: #388e3c;
 }
 /* ===== OWNER MY RENTALS (VIEW ONLY) ===== */
 

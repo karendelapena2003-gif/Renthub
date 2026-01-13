@@ -24,7 +24,11 @@ import { useNavigate } from "react-router-dom";
 import {   getAuth, updateProfile, EmailAuthProvider, reauthenticateWithCredential,  updatePassword, reauthenticateWithPopup, GoogleAuthProvider } from "firebase/auth";
 
 const OwnerDashboard = ({ onLogout }) => {
+    // Tab state for Recently Deleted
+    const [recentlyDeletedTab, setRecentlyDeletedTab] = useState('rentalitem');
   const [user, setUser] = useState(auth.currentUser);
+  const [deletedPosts, setDeletedPosts] = useState([]);
+  const [deletedEarnings, setDeletedEarnings] = useState([]);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photo, setPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(user?.photoURL || "");
@@ -54,6 +58,9 @@ const OwnerDashboard = ({ onLogout }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [userPhotos, setUserPhotos] = useState({});
   const [adminPhoto, setAdminPhoto] = useState("");
+
+  // State for expanded withdrawal row
+  const [expandedWithdrawal, setExpandedWithdrawal] = useState(null);
   const [adminDisplayName, setAdminDisplayName] = useState("");
   const [myRentalsView, setMyRentalsView] = useState([]);
   const [showRentersFor, setShowRentersFor] = useState(null); // property ID to show renters
@@ -136,12 +143,14 @@ const OwnerDashboard = ({ onLogout }) => {
     return () => unsub();
   }, []);
 
+// Fetch active and deleted posts
 useEffect(() => {
   const q = query(collection(db, "properties"), where("ownerEmail", "==", ownerEmail));
   const unsub = onSnapshot(q, (snapshot) => {
     const postData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    setPosts(postData);
-    setRentals(postData); // <-- update rentals count
+    setPosts(postData.filter(p => !p.deleted));
+    setRentals(postData.filter(p => !p.deleted));
+    setDeletedPosts(postData.filter(p => p.deleted));
   });
   return () => unsub();
 }, [ownerEmail]);
@@ -584,15 +593,43 @@ useEffect(() => {
     }
   };
 
+  // Soft delete post
   const handleDeletePost = async (id) => {
     try {
-      await deleteDoc(doc(db, "properties", id));
-      setToastMessage("✅ Post deleted successfully");
+      await updateDoc(doc(db, "properties", id), { deleted: true, deletedAt: serverTimestamp() });
+      setToastMessage("✅ Post moved to Recently Deleted");
       setTimeout(() => setToastMessage(""), 2500);
     } catch (err) {
       console.error(err);
       setToastMessage("❌ Failed to delete post");
       setTimeout(() => setToastMessage(""), 3500);
+    }
+  };
+
+  // Restore post
+  const handleRestorePost = async (id) => {
+    try {
+      await updateDoc(doc(db, "properties", id), { deleted: false });
+      setToastMessage("✅ Post restored");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to restore post");
+      setTimeout(() => setToastMessage(""), 2500);
+    }
+  };
+
+  // Permanently delete post
+  const handlePermanentDeletePost = async (id) => {
+    if (!window.confirm("Permanently delete this post? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "properties", id));
+      setToastMessage("✅ Post permanently deleted");
+      setTimeout(() => setToastMessage(""), 2500);
+    } catch (err) {
+      console.error(err);
+      setToastMessage("❌ Failed to permanently delete post");
+      setTimeout(() => setToastMessage(""), 2500);
     }
   };
 
@@ -644,17 +681,43 @@ useEffect(() => {
     }
   };
 
-  // Delete individual earning
+  // Soft delete earning
   const handleDeleteEarning = async (rentalId, amount) => {
-    // UI-only: hide this earning from Owner's Individual Earnings list (no dialog)
     try {
-      setHiddenEarningIds(prev => new Set(prev).add(rentalId));
-      setEarningsFeedback("✅ Successfully deleted from Individual Earnings");
+      await updateDoc(doc(db, "rentals", rentalId), { deleted: true, deletedAt: serverTimestamp() });
+      setEarningsFeedback("✅ Moved to Recently Deleted");
       setTimeout(() => setEarningsFeedback(""), 2000);
     } catch (err) {
       console.error(err);
-      setEarningsFeedback("❌ Failed to hide earning");
+      setEarningsFeedback("❌ Failed to delete earning");
       setTimeout(() => setEarningsFeedback(""), 3000);
+    }
+  };
+
+  // Restore earning
+  const handleRestoreEarning = async (rentalId) => {
+    try {
+      await updateDoc(doc(db, "rentals", rentalId), { deleted: false });
+      setEarningsFeedback("✅ Earning restored");
+      setTimeout(() => setEarningsFeedback(""), 2000);
+    } catch (err) {
+      console.error(err);
+      setEarningsFeedback("❌ Failed to restore earning");
+      setTimeout(() => setEarningsFeedback(""), 2000);
+    }
+  };
+
+  // Permanently delete earning
+  const handlePermanentDeleteEarning = async (rentalId) => {
+    if (!window.confirm("Permanently delete this earning? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "rentals", rentalId));
+      setEarningsFeedback("✅ Earning permanently deleted");
+      setTimeout(() => setEarningsFeedback(""), 2000);
+    } catch (err) {
+      console.error(err);
+      setEarningsFeedback("❌ Failed to permanently delete earning");
+      setTimeout(() => setEarningsFeedback(""), 2000);
     }
   };
 
@@ -1569,7 +1632,57 @@ useEffect(() => {
 )}
 
 
- {/* TOTAL EARNINGS */}
+  {/* RECENTLY DELETED SECTION */}
+  {activePage === "recentlyDeleted" && userRole === "owner" && (
+    <section className="recently-deleted-section">
+      <h2>Recently Deleted</h2>
+      <div className="deleted-section">
+        <div className="deleted-tabs">
+          <button
+            className={recentlyDeletedTab === 'rentalitem' ? 'active' : ''}
+            onClick={() => setRecentlyDeletedTab('rentalitem')}
+          >
+            Rental Item
+          </button>
+        </div>
+        <input
+          type="text"
+          placeholder="Search deleted rental items..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{ marginBottom: 16, padding: 8, width: "100%" }}
+        />
+        {deletedPosts.length === 0 ? (
+          <p>No deleted rental items.</p>
+        ) : (
+          <div className="deleted-list">
+            {deletedPosts
+              .filter(post =>
+                post.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                post.description?.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+              .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
+              .map(post => (
+                <div key={post.id} className="deleted-item-card">
+                  {post.imageUrl && (
+                    <img className="deleted-item-image" src={post.imageUrl} alt={post.name} />
+                  )}
+                  <h4>{post.name}</h4>
+                  <p>Price: ₱{post.price}</p>
+                  <p>Status: {post.status}</p>
+                  <p>Deleted: {post.deletedAt?.toDate ? post.deletedAt.toDate().toLocaleString() : "N/A"}</p>
+                  <p>Description: {post.description}</p>
+                  <div className="deleted-actions">
+                    <button className="restore-btn" onClick={() => handleRestorePost(post.id)}>Restore</button>
+                    <button className="permanent-delete-btn" onClick={() => handlePermanentDeletePost(post.id)}>Delete Permanently</button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </section>
+    )}
 {activePage === "totalEarnings" && userRole === "owner" && (
   <section className="totalearnings-owner">
     <h2>Total Earnings</h2>
@@ -1690,6 +1803,7 @@ useEffect(() => {
     </div>
 
     {/* Withdrawal History Section */}
+
     <div className="withdrawal-history-section">
       <h3>Withdrawal History</h3>
       {historyFeedback && (
@@ -1706,47 +1820,82 @@ useEffect(() => {
       </button>
 
       {showWithdrawals && (
-        <div className="withdrawals-list">
+        <div className="withdrawals-table-wrapper">
           {withdrawals.length === 0 ? (
             <p className="empty-message">No withdrawal history yet.</p>
           ) : (
-            <>
-              {withdrawals
-                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-                .map(w => (
-                <div key={w.id} className="withdrawal-item">
-                  <div className="withdrawal-header">
-                    <span className={`status-badge ${w.status}`}>
-                      {w.status === "approved" && "Approved"}
-                      {w.status === "pending" && "Pending"}
-                      {w.status === "rejected" && "Rejected"}
-                    </span>
-                    <span className="withdrawal-date">
-                      {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : "N/A"}
-                    </span>
-                  </div>
-                  <div className="withdrawal-details">
-                    <div className="detail-row">
-                      <strong>Amount:</strong>
-                      <span>₱{Number(w.amount || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="detail-row">
-                      <strong>Method:</strong>
-                      <span>{w.method || "N/A"}</span>
-                    </div>
-                    <div className="detail-row">
-                      <strong>Account:</strong>
-                      <span>{w.accountName || "N/A"}</span>
-                    </div>
-                    <div className="detail-row">
-                      <strong>Phone:</strong>
-                      <span>{w.phone || "N/A"}</span>
-                    </div>
-                  </div>
-                </div>
-                ))
-              }
-            </>
+            <table className="withdrawal-details-table">
+              <thead>
+                <tr>
+                  <th>Owner Email</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Requested Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {withdrawals
+                  .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                  .map((w, idx) => (
+                    <React.Fragment key={w.id}>
+                      <tr className="withdrawal-row">
+                        <td className="withdrawal-owner-email">{w.ownerEmail || ownerEmail}</td>
+                        <td>₱{Number(w.amount || 0).toFixed(2)}</td>
+                        <td>
+                          <span className={`status-badge ${w.status}`}>
+                            {w.status === "approved" && "Approved"}
+                            {w.status === "pending" && "Pending"}
+                            {w.status === "rejected" && "Rejected"}
+                          </span>
+                        </td>
+                        <td>{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleString() : "N/A"}</td>
+                        <td>
+                          <button 
+                            className="details-btn" 
+                            onClick={() => setExpandedWithdrawal(expandedWithdrawal === w.id ? null : w.id)}
+                          >
+                            ▶ Details
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedWithdrawal === w.id && (
+                        <tr className="expandable-row">
+                          <td colSpan="5">
+                            <div className="withdrawal-expanded">
+                              <div><strong>Method:</strong> {w.method || "N/A"}</div>
+                              <div><strong>Account Name:</strong> {w.accountName || "N/A"}</div>
+                              <div><strong>Phone:</strong> {w.phone || "N/A"}</div>
+                              <div><strong>Status:</strong> {w.status}</div>
+                              <div><strong>Requested:</strong> {w.createdAt?.toDate ? w.createdAt.toDate().toLocaleString() : "N/A"}</div>
+                              {w.remarks && <div><strong>Remarks:</strong> {w.remarks}</div>}
+                              {/* Show Confirm Amount and GCash Proof if approved */}
+                              {w.status === 'approved' && (
+                                <>
+                                  <div style={{marginTop:8, fontWeight:600}}>Confirm Amount:</div>
+                                  <div style={{marginBottom:8}}>₱{Number(w.amount || 0).toFixed(2)}</div>
+                                  {(w.gcashProofImage || w.proofImageUrl) && (
+                                    <div style={{marginTop:8}}>
+                                      <strong>📷 GCash Proof Image:</strong><br />
+                                      <a href={w.gcashProofImage || w.proofImageUrl} target="_blank" rel="noopener noreferrer">
+                                        <img 
+                                          src={w.gcashProofImage || w.proofImageUrl} 
+                                          alt="GCash Proof" 
+                                          style={{maxWidth:'180px', maxHeight:'180px', borderRadius:'8px', border:'1px solid #ccc', marginTop:'6px', cursor:'pointer'}}
+                                        />
+                                      </a>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}
@@ -1969,44 +2118,39 @@ useEffect(() => {
                 .filter(m => !m.isAdminReply && !m.isAutoReply)
                 .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
                 .map(m => {
-                  console.log(" Rendering message from:", m.sender, "| userPhotos:", userPhotos, "| selectedChat:", selectedChat);
                   return (
-                  <div
-                    key={m.id}
-                    className={`chat-bubble-container ${m.sender === ownerEmail ? "sent" : "received"}`}
-                  >
-                    {/* Profile Photo for received messages */}
-                    {m.sender !== ownerEmail && (
-                      <img 
-                        src={userPhotos[m.sender] || "/default-profile.png"} 
-                        alt={m.sender}
-                        className="chat-bubble-avatar"
-                        onError={(e) => {
-                          console.log("❌ Image load failed for:", m.sender, "| URL:", userPhotos[m.sender]);
-                          e.target.src = "/default-profile.png";
-                        }}
-                      />
-                    )}
-                    
-                    <div className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"}`}>
-                      <p className="chat-message-text">{m.text}</p>
-                      <small className="chat-message-time">
-                        {m.createdAt?.toDate
-                          ? m.createdAt.toDate().toLocaleTimeString()
-                          : new Date().toLocaleTimeString()}
-                      </small>
+                    <div
+                      key={m.id}
+                      className={`chat-bubble-container ${m.sender === ownerEmail ? "sent" : "received"}`}
+                    >
+                      {/* Profile Photo for received messages */}
+                      {m.sender !== ownerEmail && (
+                        <img 
+                          src={userPhotos[m.sender] || "/default-profile.png"} 
+                          alt={m.sender}
+                          className="chat-bubble-avatar"
+                          onError={e => { e.target.src = "/default-profile.png"; }}
+                        />
+                      )}
+                      <div className={`chat-bubble ${m.sender === ownerEmail ? "sent" : "received"}`}>
+                        <p className="chat-message-text">{m.text}</p>
+                        <small className="chat-message-time">
+                          {m.createdAt?.toDate
+                            ? m.createdAt.toDate().toLocaleTimeString()
+                            : new Date().toLocaleTimeString()}
+                        </small>
+                      </div>
+                      {/* Owner Photo for sent messages */}
+                      {m.sender === ownerEmail && (
+                        <img 
+                          src={photoPreview || "/default-profile.png"} 
+                          alt="You"
+                          className="chat-bubble-avatar"
+                        />
+                      )}
                     </div>
-                    
-                    {/* Owner Photo for sent messages */}
-                    {m.sender === ownerEmail && (
-                      <img 
-                        src={photoPreview || "/default-profile.png"} 
-                        alt="You"
-                        className="chat-bubble-avatar"
-                      />
-                    )}
-                  </div>
-                )})
+                  );
+                })
               }
             </div>
 

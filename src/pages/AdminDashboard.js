@@ -213,11 +213,11 @@ const AdminDashboard = ({ onLogout }) => {
       collection(db, "withdrawals"),
       (snap) => {
         const allWithdrawals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setWithdrawals(allWithdrawals.filter((w) => !w.deleted));
+        setWithdrawals(allWithdrawals.filter((w) => !w.adminDeleted));
         setDeletedWithdrawals(
           allWithdrawals
-            .filter((w) => w.deleted)
-            .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
+            .filter((w) => w.adminDeleted)
+            .sort((a, b) => (b.adminDeletedAt?.seconds || 0) - (a.adminDeletedAt?.seconds || 0))
         );
       },
       (err) => {
@@ -1410,37 +1410,18 @@ const handleDeleteWithdrawal = async (withdrawal) => {
     `Owner: ${withdrawal.ownerEmail}\n` +
     `Amount: ₱${Number(withdrawal.amount || 0).toFixed(2)}\n` +
     `Status: ${withdrawal.status}\n\n` +
-    `This action is PERMANENT and cannot be undone.\n` +
-    `The owner will be notified of the deletion.`
+    `This will only remove the transaction from the admin view. The owner will NOT be notified and will still see this in their history.`
   );
-  
   if (!confirmDelete) return;
-  
   try {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
-    
     await updateDoc(doc(db, "withdrawals", withdrawal.id), {
-      deleted: true,
-      deletedAt: serverTimestamp(),
-      deletedBy: currentAdminEmail,
+      adminDeleted: true,
+      adminDeletedAt: serverTimestamp(),
+      adminDeletedBy: currentAdminEmail,
     });
-    
-    // Send notification to owner about withdrawal deletion
-    if (withdrawal.ownerEmail) {
-      await addDoc(collection(db, "messages"), {
-        sender: currentAdminEmail,
-        receiver: withdrawal.ownerEmail,
-        participants: [currentAdminEmail.toLowerCase(), withdrawal.ownerEmail.toLowerCase()],
-        senderRole: "admin",
-        receiverRole: "owner",
-        text: `🗑️ Your withdrawal request of ₱${Number(withdrawal.amount || 0).toFixed(2)} has been deleted by admin.`,
-        createdAt: serverTimestamp(),
-      });
-      console.log("✅ Deletion notification sent to:", withdrawal.ownerEmail);
-    }
-    
     setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
-    setToastMessage("✅ Withdrawal deleted and owner notified");
+    setToastMessage("✅ Withdrawal deleted from admin view only");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("Failed to delete withdrawal", err);
@@ -2801,14 +2782,14 @@ const [showRentersList, setShowRentersList] = useState(false);
                               <div className="withdrawal-button-group">
                                 <button onClick={() => approveWithdrawal(w)} className="withdrawal-approve-btn">✅ Approve</button>
                                 <button onClick={() => rejectWithdrawal(w)} className="withdrawal-reject-btn">❌ Reject</button>
-                                <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
+                                <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete (Admin Only)</button>
                               </div>
                             </div>
                           )}
 
                           {w.status !== "pending" && (
                             <div className="withdrawal-action-footer">
-                              <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
+                              <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete (Admin Only)</button>
                             </div>
                           )}
                         </div>
