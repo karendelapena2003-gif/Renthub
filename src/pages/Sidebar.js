@@ -28,6 +28,7 @@ const Sidebar = ({
       { key: "dashboard", label: "Dashboard" },
       { key: "addrentalitem", label: "Add Rental Item", parent: "Rental Management" },
       { key: "rentalitem", label: "Rental Item", parent: "Rental Management" },
+      { key: "recentlyDeleted", label: "Recently Deleted" },
       { key: "totalEarnings", label: "Total Earnings" },
       { key: "messages", label: "Messages" },
     ],

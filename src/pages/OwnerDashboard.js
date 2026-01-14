@@ -180,8 +180,8 @@ useEffect(() => {
   const q = query(collection(db, "properties"), where("ownerEmail", "==", ownerEmail));
   const unsub = onSnapshot(q, (snapshot) => {
     const postData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    setPosts(postData.filter(p => !p.deleted));
-    setRentals(postData.filter(p => !p.deleted));
+    setPosts(postData); // include all, even deleted
+    setRentals(postData.filter(p => !p.deleted)); // only active for rentals
   });
   return () => unsub();
 }, [ownerEmail]);
@@ -1433,6 +1433,61 @@ useEffect(() => {
 
   <div className="dashboard-content" onClick={() => setSidebarOpen(false)}>
     {/* OWNER PROFILE */}
+      {/* RECENTLY DELETED (Sidebar Page) */}
+      {activePage === "recentlyDeleted" && userRole === "owner" && (
+        <section className="recently-deleted-owner" style={{ background: '#fff', minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '40px 0' }}>
+          <h2 style={{ color: '#222', marginBottom: 24 }}>Recently Deleted</h2>
+          <div style={{ width: '100%', maxWidth: 700, background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px rgba(0,0,0,0.07)', padding: 32, margin: '0 auto' }}>
+            {posts.filter(p => p.deleted).length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>
+                <p style={{ fontSize: 20, marginBottom: 8 }}>No recently deleted rental items.</p>
+                <p style={{ fontSize: 15 }}>Deleted rental items will appear here for 30 days before permanent removal.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {posts.filter(p => p.deleted).map(post => (
+                  <div key={post.id} style={{ background: '#fafbfc', border: '1px solid #eee', borderRadius: 12, padding: 24, display: 'flex', alignItems: 'center', gap: 32, boxShadow: '0 1px 4px rgba(0,0,0,0.03)' }}>
+                    {post.imageUrl && (
+                      <img src={post.imageUrl} alt={post.name} style={{ width: 140, height: 140, objectFit: 'cover', borderRadius: 10, border: '1.5px solid #ccc', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }} />
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: 0, color: '#222', fontSize: 22 }}>{post.name}</h3>
+                      <p style={{ margin: '8px 0 0 0', color: '#666' }}><strong>Price:</strong> ₱{post.price}</p>
+                      <p style={{ margin: '4px 0 0 0', color: '#888', fontSize: 14 }}>
+                        Deleted on: {post.deletedAt?.toDate ? post.deletedAt.toDate().toLocaleString() : (post.deletedAt ? new Date(post.deletedAt).toLocaleString() : 'N/A')}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <button
+                        style={{ background: '#2196F3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontWeight: 600, cursor: 'pointer', marginBottom: 4 }}
+                        onClick={async () => {
+                          await updateDoc(doc(db, "properties", post.id), { deleted: false, deletedAt: null });
+                          setToastMessage('✅ Rental item restored!');
+                          setTimeout(() => setToastMessage(''), 2500);
+                        }}
+                      >
+                        Restore
+                      </button>
+                      <button
+                        style={{ background: '#fff', color: '#d32f2f', border: '1px solid #d32f2f', borderRadius: 6, padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}
+                        onClick={async () => {
+                          if (window.confirm('Permanently delete this rental item? This cannot be undone.')) {
+                            await deleteDoc(doc(db, "properties", post.id));
+                            setToastMessage('✅ Rental item permanently deleted.');
+                            setTimeout(() => setToastMessage(''), 2500);
+                          }
+                        }}
+                      >
+                        Delete Permanently
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
    {activePage === "ownerProfile" && userRole === "owner" && (
   <section className="profile-owner">
     <h2>Owner Profile</h2>
@@ -1555,8 +1610,9 @@ useEffect(() => {
     <h2>Owner Dashboard Overview</h2>
     <div className="overview-cards">
 
+
       {/* Owner Profile */}
-      <div className="overview-card" onClick={() => setActivePage("ownerProfile")}>
+      <div className="overview-card" onClick={() => setActivePage("ownerProfile")}> 
         <h3>Owner Profile</h3>
         <p>View and edit your profile</p>
       </div>
@@ -1572,21 +1628,27 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* Recently Deleted */}
+      <div className="overview-card" onClick={() => setActivePage("recentlyDeleted")}> 
+        <h3>Recently Deleted</h3>
+        <p>View deleted rental items</p>
+      </div>
+
       {/* Total Earnings */}
-      <div className="overview-card" onClick={() => setActivePage("totalEarnings")}>
+      <div className="overview-card" onClick={() => setActivePage("totalEarnings")}> 
         <h3>Total Earnings</h3>
         <p>Balance: ₱{balance.toFixed(2)}</p>
         <small>Withdrawn: ₱{withdrawn.toFixed(2)}</small>
       </div>
 
       {/* Messages */}
-      <div className="overview-card" onClick={() => setActivePage("messages")}>
+      <div className="overview-card" onClick={() => setActivePage("messages")}> 
         <h3>Messages</h3>
         <p>Conversations: {conversationUsers.length}</p>
       </div>
 
       {/* Add Rental Item */}
-      <div className="overview-card" onClick={() => setActivePage("addrentalitem")}>
+      <div className="overview-card" onClick={() => setActivePage("addrentalitem")}> 
         <h3>Add Rental Item</h3>
         <p>Create new listing</p>
       </div>
@@ -2532,4 +2594,6 @@ useEffect(() => {
 </div>
   );
 }
+
+
 export default OwnerDashboard;
