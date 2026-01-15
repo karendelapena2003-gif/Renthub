@@ -213,11 +213,11 @@ const AdminDashboard = ({ onLogout }) => {
       collection(db, "withdrawals"),
       (snap) => {
         const allWithdrawals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setWithdrawals(allWithdrawals.filter((w) => !w.adminDeleted));
+        setWithdrawals(allWithdrawals.filter((w) => !w.deleted));
         setDeletedWithdrawals(
           allWithdrawals
-            .filter((w) => w.adminDeleted)
-            .sort((a, b) => (b.adminDeletedAt?.seconds || 0) - (a.adminDeletedAt?.seconds || 0))
+            .filter((w) => w.deleted)
+            .sort((a, b) => (b.deletedAt?.seconds || 0) - (a.deletedAt?.seconds || 0))
         );
       },
       (err) => {
@@ -1299,16 +1299,12 @@ const approveWithdrawal = async (withdrawal) => {
     if (!targetOwnerUid) {
       alert("❌ Cannot find owner document. Withdrawal will be approved but balance won't be deducted.");
       // Still approve the withdrawal for record purposes
-      // Preserve ownerDeleted flag
-      const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
-      const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
       await updateDoc(doc(db, "withdrawals", id), {
         status: "approved",
         approvedAt: serverTimestamp(),
         approvedBy: adminEmail,
         gcashProof: proofMessage || "",
         gcashProofImage: proofImage,
-        ownerDeleted: existing.ownerDeleted || false,
       });
       return;
     }
@@ -1336,16 +1332,12 @@ const approveWithdrawal = async (withdrawal) => {
     const newBalance = Math.max(0, currentBalance - withdrawAmount);
 
     // Update withdrawal status to approved
-    // Preserve ownerDeleted flag
-    const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
-    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
     await updateDoc(doc(db, "withdrawals", id), {
       status: "approved",
       approvedAt: serverTimestamp(),
       approvedBy: adminEmail,
       gcashProof: proofMessage || "",
       gcashProofImage: proofImage,
-      ownerDeleted: existing.ownerDeleted || false,
     });
 
     // Notify owner: only send a simple approval message (no proof image/message)
@@ -1382,14 +1374,10 @@ const rejectWithdrawal = async (withdrawal) => {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
     
     // Update withdrawal status to rejected
-    // Preserve ownerDeleted flag
-    const withdrawalDoc = await getDoc(doc(db, "withdrawals", id));
-    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
     await updateDoc(doc(db, "withdrawals", id), {
       status: "rejected",
       rejectedAt: serverTimestamp(),
       rejectedBy: currentAdminEmail,
-      ownerDeleted: existing.ownerDeleted || false,
     });
 
     // Send notification to owner: only a simple rejection message
@@ -1422,24 +1410,22 @@ const handleDeleteWithdrawal = async (withdrawal) => {
     `Owner: ${withdrawal.ownerEmail}\n` +
     `Amount: ₱${Number(withdrawal.amount || 0).toFixed(2)}\n` +
     `Status: ${withdrawal.status}\n\n` +
-    `This will only remove the transaction from the admin view. The owner will receive a notification but their balance will NOT be affected.`
+    `This action is PERMANENT and cannot be undone.\n` +
+    `The owner will be notified of the deletion.`
   );
+  
   if (!confirmDelete) return;
+  
   try {
     const currentAdminEmail = adminUser?.email || auth.currentUser?.email || "admin@renthub.com";
-    // Preserve ownerDeleted flag, DO NOT set deleted or ownerDeleted here
-    const withdrawalDoc = await getDoc(doc(db, "withdrawals", withdrawal.id));
-    const existing = withdrawalDoc.exists() ? withdrawalDoc.data() : {};
+    
     await updateDoc(doc(db, "withdrawals", withdrawal.id), {
-      adminDeleted: true,
-      adminDeletedAt: serverTimestamp(),
-      adminDeletedBy: currentAdminEmail,
-      // Only preserve ownerDeleted, do not set deleted
-      ownerDeleted: existing.ownerDeleted || false,
+      deleted: true,
+      deletedAt: serverTimestamp(),
+      deletedBy: currentAdminEmail,
     });
-    setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
-
-    // Send notification to owner
+    
+    // Send notification to owner about withdrawal deletion
     if (withdrawal.ownerEmail) {
       await addDoc(collection(db, "messages"), {
         sender: currentAdminEmail,
@@ -1447,13 +1433,14 @@ const handleDeleteWithdrawal = async (withdrawal) => {
         participants: [currentAdminEmail.toLowerCase(), withdrawal.ownerEmail.toLowerCase()],
         senderRole: "admin",
         receiverRole: "owner",
-        text: `❗ Your withdrawal of ₱${Number(withdrawal.amount || 0).toFixed(2)} was removed from the admin transaction list. This does NOT affect your balance. Please contact admin if you have questions.`,
+        text: `🗑️ Your withdrawal request of ₱${Number(withdrawal.amount || 0).toFixed(2)} has been deleted by admin.`,
         createdAt: serverTimestamp(),
-        isSystemMessage: true,
       });
+      console.log("✅ Deletion notification sent to:", withdrawal.ownerEmail);
     }
-
-    setToastMessage("✅ Withdrawal deleted from admin view and owner notified");
+    
+    setWithdrawals(prev => prev.filter(item => item.id !== withdrawal.id));
+    setToastMessage("✅ Withdrawal deleted and owner notified");
     setTimeout(() => setToastMessage(""), 2500);
   } catch (err) {
     console.error("Failed to delete withdrawal", err);
@@ -1866,7 +1853,7 @@ const [showRentersList, setShowRentersList] = useState(false);
               </div>
               <div className="stat-card" onClick={() => setActivePage("rentlist")}>
                 <h3>Rent List</h3>
-                <p>{rentals.length}</p>
+                <p>{properties.length}</p>
               </div>
               <div className={`stat-card ${overdueRentals.length > 0 ? "overdue-alert" : ""}`} onClick={() => setActivePage("rentlist")}>
                 <h3>⚠️ Overdue Returns</h3>
@@ -2814,14 +2801,17 @@ const [showRentersList, setShowRentersList] = useState(false);
                               <div className="withdrawal-button-group">
                                 <button onClick={() => approveWithdrawal(w)} className="withdrawal-approve-btn">✅ Approve</button>
                                 <button onClick={() => rejectWithdrawal(w)} className="withdrawal-reject-btn">❌ Reject</button>
-                                <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete (Admin Only)</button>
+                                {/* Hide delete button if status is pending */}
+                                {w.status !== 'pending' && (
+                                  <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
+                                )}
                               </div>
                             </div>
                           )}
 
                           {w.status !== "pending" && (
                             <div className="withdrawal-action-footer">
-                              <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete (Admin Only)</button>
+                              <button onClick={() => handleDeleteWithdrawal(w)} className="withdrawal-delete-btn">🗑️ Delete</button>
                             </div>
                           )}
                         </div>
